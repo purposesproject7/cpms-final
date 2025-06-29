@@ -1,0 +1,47 @@
+import express from 'express';
+import mongoose from 'mongoose';
+import bodyParser from 'body-parser';
+import cors from "cors";
+import dotenv from 'dotenv';
+import cookieParser from 'cookie-parser';
+import connectDB from './utils/db.js';
+
+import projectRouter from "./routes/projectRoutes.js";
+import adminRouter from "./routes/adminRoutes.js";
+import authRouter from "./routes/authRoutes.js";
+import studentRouter from './routes/studentRoutes.js';
+import facultyRouter from './routes/facultyRoutes.js';
+
+import otpRouter from "./routes/otpRoutes.js";
+
+
+
+
+dotenv.config();
+connectDB();
+
+const app = express();
+
+// CORS setup — allow frontend origin
+app.use(cors({
+  origin: 'http://localhost:5173', // your Vite frontend
+  credentials: true
+}));
+
+app.use(express.json());
+app.use(bodyParser.json());
+app.use(cookieParser()); // good to have for future
+
+const PORT = process.env.PORT || 5000;
+
+// Mount API routes
+app.use("/api/auth", authRouter);       // POST /api/auth/login
+app.use("/api/project", projectRouter); // project routes
+app.use("/api/admin", adminRouter);     // GET /api/admin/allFaculty etc.
+app.use("/api/student", studentRouter);
+app.use("/api/faculty", facultyRouter); // GET /api/faculty/getFacultyDetails/:id
+app.use("/api/otp", otpRouter);
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
+});
