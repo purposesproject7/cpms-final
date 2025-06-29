@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import PopupReview from '../components/PopupReview';
-import ReviewTable from '../components/ReviewTable';
+import PopupReview from '../Components/PopupReview';
+import ReviewTable from '../Components/ReviewTable';
 import Navbar from '../Components/UniversalNavbar';
 import { ChevronRight } from 'lucide-react';
 import { 

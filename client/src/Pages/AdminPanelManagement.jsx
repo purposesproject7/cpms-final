@@ -9,8 +9,8 @@ import {
   autoAssignPanelsToProjects,
   autoCreatePanelManual,
 } from "../api";
-import TeamPopup from '../components/TeamPopup';
-import ConfirmPopup from '../components/ConfirmDialog';
+import TeamPopup from '../Components/TeamPopup';
+import ConfirmPopup from '../Components/ConfirmDialog';
 import Navbar from '../Components/UniversalNavbar';
 import { ChevronRight, ChevronDown } from 'lucide-react';  
 
