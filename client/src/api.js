@@ -1,9 +1,9 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:3000"; // Define base URL constant
-
 const API = axios.create({
-  baseURL: `${API_BASE_URL}/api`, // Use the constant
+  baseURL: import.meta.env.VITE_API_URL,
+  withCredentials: true
+, // Make sure this matches your backend port
 });
 
 // Add authorization token to all requests if available

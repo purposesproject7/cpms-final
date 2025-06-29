@@ -22,9 +22,15 @@ connectDB();
 
 const app = express();
 
-// CORS setup — allow frontend origin
+const allowedOrigins = [
+  'http://localhost:3000', // for development // your deployed frontend on Vercel
+  'http://localhost:5173',
+
+];
+
+
 app.use(cors({
-  origin: 'http://localhost:5173', // your Vite frontend
+  origin: allowedOrigins,
   credentials: true
 }));
 
