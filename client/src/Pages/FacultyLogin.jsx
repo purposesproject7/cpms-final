@@ -12,7 +12,7 @@ const FacultyLogin = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const API_BASE_URL = "http://localhost:3000";
+  const API_BASE_URL = import.meta.env.VITE_API_URL;
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
@@ -43,7 +43,10 @@ const FacultyLogin = () => {
       setLoading(true);
       setMessage('');
 
-      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+      const API_BASE_URL = import.meta.env.VITE_API_URL.replace(/\/+$/, ''); // strip trailing slash
+      const endpoint = "/auth/login";
+
+      const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
         emailId: loginEmail,
         password: loginPassword,
       });
