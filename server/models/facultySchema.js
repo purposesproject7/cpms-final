@@ -20,7 +20,7 @@ const facultySchema = new mongoose.Schema({
     type: String,
     unique: true,
     required: true,
-    match: [/.+@vit\.ac\.in$/, "Please enter a valid VIT email address"],
+    match: [/.+@vit\.ac\.in$/, "Please enter a valid VIT email address"], // for testing purposes we use gmail 
   },
   password: {
     type: String,

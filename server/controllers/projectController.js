@@ -19,20 +19,15 @@ import SystemConfig from "../models/systemConfigSchema.js";
  * Expected req.body:
  * {
  *   name: "Project Name", // Unique identifier for the project
- *   students: [ { regNo, name, emailId, draftReview, review0, review1, review2, review3, pptApproved, attendance, deadline }, ... ],
+ *   students: [ { regNo, name, emailId, draftReview, review0, review1, review2, review3, review3, pptApproved, deadline }, ... ],
  *   guideFacultyEmpId: "guide faculty employee id"
  * }
  */
 
 export async function createProject(req, res, next) {
   try {
-    const {
-      name,
-      students: studentDetails, // array of student objects with details.
-      guideFacultyEmpId,
-    } = req.body;
+    const { name, students: studentDetails, guideFacultyEmpId } = req.body;
 
-    // Fetch system config once to get default deadlines
     const systemConfig = await SystemConfig.findOne({});
     if (!systemConfig) {
       return res.status(500).json({
@@ -41,14 +36,15 @@ export async function createProject(req, res, next) {
       });
     }
 
+    // Destructure with new review4 and without top-level attendance
     const {
       draftReview,
       review0,
       review1,
       review2,
       review3,
+      review4, // Added review4
       pptApproved,
-      attendance,
     } = systemConfig;
 
     const defaultDeadlines = {
@@ -57,71 +53,103 @@ export async function createProject(req, res, next) {
       review1,
       review2,
       review3,
+      review4, // Added review4
       pptApproved,
-      attendance,
     };
 
-    // Lookup or create each student based on regNo
     const studentIds = await Promise.all(
       studentDetails.map(async (studentObj) => {
         const {
           regNo,
           name: studentName,
           emailId,
-          draftReview,
-          review0,
-          review1,
-          review2,
-          review3,
-          pptApproved,
-          attendance,
-          deadline,
+          draftReview: dr,
+          review0: r0,
+          review1: r1,
+          review2: r2,
+          review3: r3,
+          review4: r4, // Added review4
+          pptApproved: ppt,
+          deadline: dl,
         } = studentObj;
 
         let student = await Student.findOne({ regNo });
 
         if (!student) {
+          // New structure with per-review attendance
+          const baseReviewStructure = (reviewData) => ({
+            component1: reviewData?.component1 || null,
+            component2: reviewData?.component2 || null,
+            component3: reviewData?.component3 || null,
+            attendance: {
+              value: reviewData?.attendance?.value || false,
+              locked: reviewData?.attendance?.locked || false,
+            },
+            locked: reviewData?.locked || false,
+          });
+
           student = new Student({
             regNo,
             name: studentName,
             emailId,
-            draftReview: draftReview || {
-              component1: null,
-              component2: null,
-              component3: null,
-              locked: false,
-            },
-            review0: review0 || {
-              component1: null,
-              locked: false,
-            },
-            review1: review1 || {
-              component1: null,
-              component2: null,
-              component3: null,
-              locked: false,
-            },
-            review2: review2 || {
-              component1: null,
-              component2: null,
-              component3: null,
-              locked: false,
-            },
-            review3: review3 || {
-              component1: null,
-              component2: null,
-              component3: null,
-              locked: false,
-            },
-            pptApproved: pptApproved || {
+            draftReview: dr
+              ? baseReviewStructure(dr)
+              : {
+                  component1: null,
+                  component2: null,
+                  component3: null,
+                  attendance: { value: false, locked: false },
+                  locked: false,
+                },
+            review0: r0
+              ? baseReviewStructure(r0)
+              : {
+                  component1: null,
+                  attendance: { value: false, locked: false },
+                  locked: false,
+                },
+            review1: r1
+              ? baseReviewStructure(r1)
+              : {
+                  component1: null,
+                  component2: null,
+                  component3: null,
+                  attendance: { value: false, locked: false },
+                  locked: false,
+                },
+            review2: r2
+              ? baseReviewStructure(r2)
+              : {
+                  component1: null,
+                  component2: null,
+                  component3: null,
+                  attendance: { value: false, locked: false },
+                  locked: false,
+                },
+            review3: r3
+              ? baseReviewStructure(r3)
+              : {
+                  component1: null,
+                  component2: null,
+                  component3: null,
+                  attendance: { value: false, locked: false },
+                  locked: false,
+                },
+            review4: r4
+              ? baseReviewStructure(r4)
+              : {
+                  // Added review4
+                  component1: null,
+                  component2: null,
+                  component3: null,
+                  attendance: { value: false, locked: false },
+                  locked: false,
+                },
+            pptApproved: ppt || {
               approved: false,
               locked: false,
             },
-            attendance: attendance || {
-              value: false,
-              locked: false,
-            },
-            deadline: deadline || JSON.parse(JSON.stringify(defaultDeadlines)),
+            deadline: dl || JSON.parse(JSON.stringify(defaultDeadlines)),
           });
 
           await student.save();
@@ -131,7 +159,6 @@ export async function createProject(req, res, next) {
       })
     );
 
-    // Lookup guide faculty
     const guideFacultyDoc = await Faculty.findOne({
       employeeId: guideFacultyEmpId,
     });
@@ -141,12 +168,10 @@ export async function createProject(req, res, next) {
       );
     }
 
-    const guideFaculty = guideFacultyDoc._id;
-
     const newProject = new Project({
       name,
       students: studentIds,
-      guideFaculty,
+      guideFaculty: guideFacultyDoc._id,
       panel: null,
     });
 
@@ -163,6 +188,7 @@ export async function createProject(req, res, next) {
       .json({ message: "Error creating project", error: error.message });
   }
 }
+
 
 
 export async function deleteProject(req, res) {
@@ -309,6 +335,9 @@ export async function getAllPanelProjects(req, res, next) {
 // In this i have chosen to update the whole project even if there is only change for 1 student, this is bcos,
 // we dont have an update button for individual btn in the fronend just one for the whole project...
 // if this seems inefficient we can change it have individual endpoints for different updates...
+// Update your updateProjectDetails function to handle comments:
+
+
 export async function updateProjectDetails(req, res, next) {
   try {
     const { projectId, studentUpdates, pptApproved } = req.body;
@@ -317,12 +346,6 @@ export async function updateProjectDetails(req, res, next) {
     if (!project) {
       return res.status(404).json({ message: "Project not found." });
     }
-
-    // Added by theju - Remove project-level PPT update since it doesn't exist in schema
-    // if (pptApproved) {
-    //   project.pptApproved = pptApproved;
-    //   await project.save();
-    // }
 
     const updateResults = [];
 
@@ -334,9 +357,8 @@ export async function updateProjectDetails(req, res, next) {
         review1,
         review2,
         review3,
+        review4,
         pptApproved,
-        attendance,
-        comments,
       } = studentData;
 
       if (!studentId) {
@@ -351,11 +373,11 @@ export async function updateProjectDetails(req, res, next) {
       if (review1) updatePayload.review1 = review1;
       if (review2) updatePayload.review2 = review2;
       if (review3) updatePayload.review3 = review3;
+      if (review4) updatePayload.review4 = review4;
       if (pptApproved) updatePayload.pptApproved = pptApproved;
-      if (attendance) updatePayload.attendance = attendance;
-      if (comments) updatePayload.comments = comments;
 
-      console.log('Updating student:', studentId, JSON.stringify(updatePayload));
+      // All review objects must include attendance as per your frontend
+      // (no extra logic needed here, as the frontend always sends it)
 
       const updatedStudent = await Student.findByIdAndUpdate(
         studentId,
@@ -370,11 +392,8 @@ export async function updateProjectDetails(req, res, next) {
       }
     }
 
-    // Added by theju - If team-level PPT approval is needed, update all students
+    // Team-level PPT approval update
     if (pptApproved) {
-      console.log('Updating team-level PPT approval for all students:', pptApproved);
-      
-      // Update all students in the project with the same PPT approval
       for (const studentData of studentUpdates) {
         if (studentData.studentId) {
           await Student.findByIdAndUpdate(
@@ -382,20 +401,17 @@ export async function updateProjectDetails(req, res, next) {
             { $set: { pptApproved: pptApproved } },
             { new: true }
           );
-          console.log(`Updated PPT approval for student ${studentData.studentId}:`, pptApproved);
         }
       }
     }
-
-    console.log('Project update complete:', projectId, updateResults);
 
     return res.status(200).json({
       message: "All student marks updated successfully",
       updates: updateResults,
       data: {
         success: true,
-        message: "Project updated successfully"
-      }
+        message: "Project updated successfully",
+      },
     });
   } catch (error) {
     console.error("Error updating student marks:", error);
@@ -405,6 +421,7 @@ export async function updateProjectDetails(req, res, next) {
     });
   }
 }
+
 
 
 

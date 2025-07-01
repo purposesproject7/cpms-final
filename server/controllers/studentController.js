@@ -50,7 +50,7 @@ export async function requestAdmin(req, res, next) {
     // Validate review types
     const allowedReviewTypes = {
       guide: ["review0", "draftReview", "review1"],
-      panel: ["review2", "review3"]
+      panel: ["review2", "review3", "review4"],
     };
 
     if (!allowedReviewTypes[facultyType].includes(reviewType)) {
@@ -77,10 +77,6 @@ export async function requestAdmin(req, res, next) {
     return res.status(500).json({ message: error.message });
   }
 }
-
-
-
-
 
 export async function checkRequestStatus(req, res) {
   try {

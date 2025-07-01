@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import PopupReview from '../Components/PopupReview';
-
-import ReviewTable from '../Components/ReviewTable';
+import PopupReview from '../components/PopupReview';
+import ReviewTable from '../components/ReviewTable';
 import Navbar from '../Components/UniversalNavbar';
 import { ChevronRight } from 'lucide-react';
 import { 
@@ -39,6 +38,15 @@ const Panel = () => {
         const projects = projectsRes.data.data;
         console.log('Raw panel projects from backend:', projects);
         
+        // DEBUG: Check deadline structure
+        projects.forEach(project => {
+          console.log(`Project ${project.name} students:`, project.students);
+          
+          project.students?.forEach(student => {
+            console.log(`Student ${student.name} deadline structure:`, student.deadline);
+          });
+        });
+        
         const mappedTeams = projects.map(project => {
           return {
             id: project._id,
@@ -74,7 +82,38 @@ const Panel = () => {
     }
   };
 
-  const isDeadlinePassed = (reviewType) => {
+  // FIXED: Team-level deadline checking using nested deadline structure (like Guide)
+  const isTeamDeadlinePassed = (reviewType, teamId) => {
+    console.log(`=== PANEL TEAM DEADLINE CHECK FOR ${reviewType} ===`);
+    
+    const team = teams.find(t => t.id === teamId);
+    if (!team) return false;
+    
+    // Check if ANY student in the team has an individual deadline override
+    const hasIndividualOverride = team.students.some(student => 
+      student.deadline && student.deadline[reviewType]
+    );
+    
+    if (hasIndividualOverride) {
+      // If any student has individual override, use the LATEST deadline from all students
+      const studentDeadlines = team.students
+        .filter(student => student.deadline && student.deadline[reviewType])
+        .map(student => new Date(student.deadline[reviewType].to));
+      
+      if (studentDeadlines.length > 0) {
+        const latestDeadline = new Date(Math.max(...studentDeadlines));
+        const now = new Date();
+        
+        console.log(`Panel team has individual overrides. Latest deadline:`, latestDeadline.toISOString());
+        console.log('Current time:', now.toISOString());
+        
+        const isPassed = now > latestDeadline;
+        console.log(`✅ Panel team ${reviewType} deadline passed:`, isPassed);
+        return isPassed;
+      }
+    }
+    
+    // Fall back to system default deadlines
     if (!deadlines || !deadlines[reviewType]) {
       console.log(`No deadline found for ${reviewType}`);
       return false;
@@ -83,9 +122,8 @@ const Panel = () => {
     const now = new Date();
     const deadline = deadlines[reviewType];
     
-    console.log(`=== PANEL DEADLINE CHECK FOR ${reviewType} ===`);
+    console.log(`Panel system deadline for ${reviewType}:`, deadline);
     console.log('Current time:', now.toISOString());
-    console.log('Deadline object:', deadline);
     
     if (deadline.from && deadline.to) {
       const fromDate = new Date(deadline.from);
@@ -94,32 +132,27 @@ const Panel = () => {
       console.log('To date:', toDate.toISOString());
       
       const isPassed = now < fromDate || now > toDate;
-      console.log(`Panel ${reviewType} deadline passed:`, isPassed);
-      return isPassed;
-    } else if (typeof deadline === 'string') {
-      const deadlineDate = new Date(deadline);
-      console.log('Deadline date:', deadlineDate.toISOString());
-      const isPassed = now > deadlineDate;
-      console.log(`Panel ${reviewType} deadline passed:`, isPassed);
+      console.log(`✅ Panel system ${reviewType} deadline passed:`, isPassed);
       return isPassed;
     }
     
     return false;
   };
 
-  const isReviewLocked = (student, reviewType) => {
+  const isReviewLocked = (student, reviewType, teamId) => {
+    // Check manual lock first
     const studentReview = student[reviewType];
     if (studentReview?.locked) {
       console.log(`Panel student ${student.name} ${reviewType} is manually locked`);
       return true;
     }
     
-    const deadlinePassed = isDeadlinePassed(reviewType);
-    console.log(`Panel student ${student.name} ${reviewType} locked due to deadline:`, deadlinePassed);
-    return deadlinePassed;
+    // Check team-level deadline
+    const teamDeadlinePassed = isTeamDeadlinePassed(reviewType, teamId);
+    console.log(`Panel team ${reviewType} deadline passed:`, teamDeadlinePassed);
+    return teamDeadlinePassed;
   };
 
-  // FIX: Updated getTeamRequestStatus - check pending FIRST
   const getTeamRequestStatus = (team, reviewType) => {
     console.log(`=== GETTING PANEL TEAM REQUEST STATUS FOR ${reviewType} ===`);
     
@@ -130,15 +163,15 @@ const Panel = () => {
       return status;
     });
     
-    // FIX: Check for pending FIRST, before deadline override
+    // Check for pending FIRST
     if (statuses.includes('pending')) {
       console.log(`Panel team ${reviewType} status: pending`);
       return 'pending';
     }
     
-    // FIX: Only override to 'none' if deadline passed AND no pending requests
-    if (isDeadlinePassed(reviewType)) {
-      console.log(`Deadline passed for ${reviewType} - overriding non-pending status to 'none'`);
+    // Check if team deadline passed
+    if (isTeamDeadlinePassed(reviewType, team.id)) {
+      console.log(`Panel team deadline passed for ${reviewType} - status: none`);
       return 'none';
     }
     
@@ -166,33 +199,21 @@ const Panel = () => {
         
         const updateData = {
           studentId: student._id,
-          comments: studentReviewData.comments
         };
 
-        // FIX: Add review1 support
-        if (reviewType === 'review1') {
-          updateData.review1 = {
-            component1: studentReviewData.component1 || null,
-            component2: studentReviewData.component2 || null,
-            component3: studentReviewData.component3 || null,
-            locked: studentReviewData.locked || false
-          };
-          if (studentReviewData.attendance) {
-            updateData.attendance = studentReviewData.attendance;
-          }
-          if (pptObj && pptObj.pptApproved) {
-            updateData.pptApproved = pptObj.pptApproved;
-          }
-        } else if (reviewType === 'review2') {
+        // FIXED: Updated to match new schema with attendance inside each review + COMMENTS
+        if (reviewType === 'review2') {
           updateData.review2 = {
             component1: studentReviewData.component1 || null,
             component2: studentReviewData.component2 || null,
             component3: studentReviewData.component3 || null,
+            attendance: {
+              value: studentReviewData.attendance?.value || false,
+              locked: studentReviewData.attendance?.locked || false
+            },
+            comments: studentReviewData.comments || '', // ADDED: Comments
             locked: studentReviewData.locked || false
           };
-          if (studentReviewData.attendance) {
-            updateData.attendance = studentReviewData.attendance;
-          }
           if (pptObj && pptObj.pptApproved) {
             updateData.pptApproved = pptObj.pptApproved;
           }
@@ -201,11 +222,28 @@ const Panel = () => {
             component1: studentReviewData.component1 || null,
             component2: studentReviewData.component2 || null,
             component3: studentReviewData.component3 || null,
+            attendance: {
+              value: studentReviewData.attendance?.value || false,
+              locked: studentReviewData.attendance?.locked || false
+            },
+            comments: studentReviewData.comments || '', // ADDED: Comments
             locked: studentReviewData.locked || false
           };
-          if (studentReviewData.attendance) {
-            updateData.attendance = studentReviewData.attendance;
+          if (pptObj && pptObj.pptApproved) {
+            updateData.pptApproved = pptObj.pptApproved;
           }
+        } else if (reviewType === 'review4') {
+          updateData.review4 = {
+            component1: studentReviewData.component1 || null,
+            component2: studentReviewData.component2 || null,
+            component3: studentReviewData.component3 || null,
+            attendance: {
+              value: studentReviewData.attendance?.value || false,
+              locked: studentReviewData.attendance?.locked || false
+            },
+            comments: studentReviewData.comments || '', // ADDED: Comments
+            locked: studentReviewData.locked || false
+          };
           if (pptObj && pptObj.pptApproved) {
             updateData.pptApproved = pptObj.pptApproved;
           }
@@ -219,10 +257,11 @@ const Panel = () => {
         studentUpdates
       };
 
-      // FIX: Add review1 PPT support
-      if (['review1', 'review2', 'review3'].includes(reviewType) && pptObj) {
+      if (['review2', 'review3', 'review4'].includes(reviewType) && pptObj) {
         updatePayload.pptApproved = pptObj.pptApproved;
       }
+
+      console.log('Final panel update payload:', JSON.stringify(updatePayload, null, 2));
 
       const response = await updateProject(updatePayload);
       
@@ -246,7 +285,10 @@ const Panel = () => {
       const reason = prompt('Please enter the reason for requesting edit access:', 'Need to correct marks after deadline');
       if (!reason?.trim()) return;
       
+      const currentUser = JSON.parse(localStorage.getItem('faculty') || '{}');
+      
       const requestData = {
+        employeeId: currentUser.employeeId || 'CURRENT_USER',
         regNo: team.students[0].regNo,
         reviewType: reviewType,
         reason: reason.trim()
@@ -314,13 +356,6 @@ const Panel = () => {
                         <p className="text-sm text-gray-600 ml-6">{team.description}</p>
                       </div>
                       <div className="flex gap-2">
-                        {/* FIX: Add missing review1 button */}
-                        <button
-                          onClick={() => setActivePopup({ type: 'review1', teamId: team.id })}
-                          className="px-4 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
-                        >
-                          Guide Review
-                        </button>
                         <button
                           onClick={() => setActivePopup({ type: 'review2', teamId: team.id })}
                           className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
@@ -331,6 +366,12 @@ const Panel = () => {
                           onClick={() => setActivePopup({ type: 'review3', teamId: team.id })}
                           className="px-4 py-2 bg-purple-500 text-white text-sm rounded hover:bg-purple-600 transition-colors"
                         >
+                          Panel Review 2
+                        </button>
+                        <button
+                          onClick={() => setActivePopup({ type: 'review4', teamId: team.id })}
+                          className="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
+                        >
                           Final Review
                         </button>
                       </div>
@@ -340,8 +381,8 @@ const Panel = () => {
                         team={team} 
                         deadlines={deadlines}
                         requestStatuses={requestStatuses}
-                        isDeadlinePassed={isDeadlinePassed}
-                        isReviewLocked={isReviewLocked}
+                        isDeadlinePassed={(reviewType) => isTeamDeadlinePassed(reviewType, team.id)}
+                        isReviewLocked={(student, reviewType) => isReviewLocked(student, reviewType, team.id)}
                         panelMode={true}
                       />
                     )}
@@ -351,40 +392,7 @@ const Panel = () => {
             )}
           </div>
 
-          {/* FIX: Add missing review1 popup handler */}
-          {activePopup?.type === 'review1' && (
-            <PopupReview
-              title="Guide Review"
-              teamMembers={teams.find(t => t.id === activePopup.teamId).students}
-              reviewType="review1"
-              pptApproved={{
-                approved: (() => {
-                  const team = teams.find(t => t.id === activePopup.teamId);
-                  return team.students.length > 0 && 
-                    team.students.every(student => student.pptApproved?.approved === true);
-                })(),
-                locked: false
-              }}
-              isOpen={true}
-              locked={teams.find(t => t.id === activePopup.teamId).students.some(student => 
-                isReviewLocked(student, 'review1')
-              )}
-              onClose={() => setActivePopup(null)}
-              onSubmit={(data, pptObj) => {
-                handleReviewSubmit(activePopup.teamId, 'review1', data, pptObj);
-                setActivePopup(null);
-              }}
-              onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review1')}
-              requestEditVisible={(() => {
-                const team = teams.find(t => t.id === activePopup.teamId);
-                const isLocked = team.students.some(student => isReviewLocked(student, 'review1'));
-                const requestStatus = getTeamRequestStatus(team, 'review1');
-                return isLocked && requestStatus === 'none';
-              })()}
-              requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'review1') === 'pending'}
-            />
-          )}
-
+          {/* Panel Review 1 (review2) */}
           {activePopup?.type === 'review2' && (
             <PopupReview
               title="Panel Review 1"
@@ -399,9 +407,7 @@ const Panel = () => {
                 locked: false
               }}
               isOpen={true}
-              locked={teams.find(t => t.id === activePopup.teamId).students.some(student => 
-                isReviewLocked(student, 'review2')
-              )}
+              locked={isTeamDeadlinePassed('review2', activePopup.teamId)}
               onClose={() => setActivePopup(null)}
               onSubmit={(data, pptObj) => {
                 handleReviewSubmit(activePopup.teamId, 'review2', data, pptObj);
@@ -410,18 +416,18 @@ const Panel = () => {
               onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review2')}
               requestEditVisible={(() => {
                 const team = teams.find(t => t.id === activePopup.teamId);
-                const isLocked = team.students.some(student => isReviewLocked(student, 'review2'));
+                const isLocked = isTeamDeadlinePassed('review2', activePopup.teamId);
                 const requestStatus = getTeamRequestStatus(team, 'review2');
-                console.log('Panel review2 - isLocked:', isLocked, 'requestStatus:', requestStatus);
                 return isLocked && requestStatus === 'none';
               })()}
               requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'review2') === 'pending'}
             />
           )}
 
+          {/* Panel Review 2 (review3) */}
           {activePopup?.type === 'review3' && (
             <PopupReview
-              title="Final Review"
+              title="Panel Review 2"
               teamMembers={teams.find(t => t.id === activePopup.teamId).students}
               reviewType="review3"
               pptApproved={{
@@ -433,9 +439,7 @@ const Panel = () => {
                 locked: false
               }}
               isOpen={true}
-              locked={teams.find(t => t.id === activePopup.teamId).students.some(student => 
-                isReviewLocked(student, 'review3')
-              )}
+              locked={isTeamDeadlinePassed('review3', activePopup.teamId)}
               onClose={() => setActivePopup(null)}
               onSubmit={(data, pptObj) => {
                 handleReviewSubmit(activePopup.teamId, 'review3', data, pptObj);
@@ -444,12 +448,43 @@ const Panel = () => {
               onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review3')}
               requestEditVisible={(() => {
                 const team = teams.find(t => t.id === activePopup.teamId);
-                const isLocked = team.students.some(student => isReviewLocked(student, 'review3'));
+                const isLocked = isTeamDeadlinePassed('review3', activePopup.teamId);
                 const requestStatus = getTeamRequestStatus(team, 'review3');
-                console.log('Panel review3 - isLocked:', isLocked, 'requestStatus:', requestStatus);
                 return isLocked && requestStatus === 'none';
               })()}
               requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'review3') === 'pending'}
+            />
+          )}
+
+          {/* Final Review (review4) */}
+          {activePopup?.type === 'review4' && (
+            <PopupReview
+              title="Final Review"
+              teamMembers={teams.find(t => t.id === activePopup.teamId).students}
+              reviewType="review4"
+              pptApproved={{
+                approved: (() => {
+                  const team = teams.find(t => t.id === activePopup.teamId);
+                  return team.students.length > 0 && 
+                    team.students.every(student => student.pptApproved?.approved === true);
+                })(),
+                locked: false
+              }}
+              isOpen={true}
+              locked={isTeamDeadlinePassed('review4', activePopup.teamId)}
+              onClose={() => setActivePopup(null)}
+              onSubmit={(data, pptObj) => {
+                handleReviewSubmit(activePopup.teamId, 'review4', data, pptObj);
+                setActivePopup(null);
+              }}
+              onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review4')}
+              requestEditVisible={(() => {
+                const team = teams.find(t => t.id === activePopup.teamId);
+                const isLocked = isTeamDeadlinePassed('review4', activePopup.teamId);
+                const requestStatus = getTeamRequestStatus(team, 'review4');
+                return isLocked && requestStatus === 'none';
+              })()}
+              requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'review4') === 'pending'}
             />
           )}
         </div>

@@ -37,6 +37,7 @@ const FacultyManagement = () => {
     }
   }, [error]);
 
+  // FIX: Do not clear the success message here!
   const resetForm = () => {
     setFormData({
       imageUrl: '',
@@ -47,8 +48,8 @@ const FacultyManagement = () => {
       role: 'faculty'
     });
     setError('');
-    setSuccess('');
     setShowPassword(false);
+    // setSuccess(''); <-- REMOVED
   };
 
   const handleInputChange = (e) => {
@@ -77,8 +78,7 @@ const FacultyManagement = () => {
       throw new Error('Email is required');
     }
     
-    // FIX: Add back the missing email validation
-    if (!formData.emailId.endsWith('@vitstudent.ac.in')) {
+    if (!formData.emailId.endsWith('@vit.ac.in')) {
       throw new Error('Only VIT email addresses are allowed (@vit.ac.in)');
     }
     
@@ -86,7 +86,6 @@ const FacultyManagement = () => {
       throw new Error('Password is required');
     }
     
-    // Password validation matching backend
     if (formData.password.length < 8) {
       throw new Error('Password must be at least 8 characters long');
     }
@@ -114,57 +113,33 @@ const FacultyManagement = () => {
     setIsLoading(true);
 
     try {
-      // Validate form first
       validateForm();
 
-      // FIX: Ensure all data is explicitly converted to strings and trimmed
       const apiData = {
         name: String(formData.name.trim()),
-        emailId: String(formData.emailId.trim().toLowerCase()), // Also convert to lowercase
+        emailId: String(formData.emailId.trim().toLowerCase()),
         password: String(formData.password),
-        employeeId: String(formData.employeeId.trim().toUpperCase()) // Convert to uppercase for consistency
+        employeeId: String(formData.employeeId.trim().toUpperCase())
       };
 
-      console.log('Submitting data (all strings):', apiData);
-      console.log('Data types check:');
-      console.log('- name type:', typeof apiData.name, '| value:', apiData.name);
-      console.log('- emailId type:', typeof apiData.emailId, '| value:', apiData.emailId);
-      console.log('- password type:', typeof apiData.password, '| length:', apiData.password.length);
-      console.log('- employeeId type:', typeof apiData.employeeId, '| value:', apiData.employeeId);
-      console.log('Selected role:', formData.role);
-
-      // Call appropriate real API based on role
       let response;
       if (formData.role === 'faculty') {
-        console.log('Calling createFaculty API...');
         response = await createFaculty(apiData);
       } else if (formData.role === 'admin') {
-        console.log('Calling createAdmin API...');
         response = await createAdmin(apiData);
       } else {
         throw new Error('Invalid role selected');
       }
 
-      console.log('API response:', response);
-
       setSuccess(response.message || `${formData.role === 'faculty' ? 'Faculty' : 'Admin'} created successfully!`);
-      
-      // Reset form AFTER successful creation
       resetForm();
       
     } catch (err) {
-      console.error('Creation error:', err);
-      
-      // FIX: Enhanced error handling to show backend validation errors
       if (err.response && err.response.data) {
-        // Backend validation error
-        console.log('Backend error response:', err.response.data);
         setError(err.response.data.message || 'Server validation failed');
       } else if (err.message) {
-        // Client-side validation error
         setError(err.message);
       } else {
-        // Generic error
         setError('Failed to create user. Please try again.');
       }
     } finally {
@@ -199,7 +174,6 @@ const FacultyManagement = () => {
               </div>
             </div>
           )}
-
           {/* Faculty Form */}
           <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
             <h1 className="font-semibold font-roboto mb-4 text-2xl md:text-3xl">
@@ -306,7 +280,6 @@ const FacultyManagement = () => {
                   Must be a valid VIT email address ending with @vit.ac.in
                 </p>
               </div>
-
               {/* Password */}
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
@@ -373,7 +346,6 @@ const FacultyManagement = () => {
                   URL to profile image hosted on a cloud service (Note: This field is for display only and won't be saved)
                 </p>
               </div>
-
               {/* Submit Button */}
               <div className="pt-4">
                 <button

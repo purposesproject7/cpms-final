@@ -14,11 +14,12 @@ const componentLabels = {
     { key: 'component3', label: 'Component 3 (out of 10)' },
   ],
   review2: [
-    { key: 'component1', label: 'Component 1 (out of 10)' },
-    { key: 'component2', label: 'Component 2 (out of 10)' },
-    { key: 'component3', label: 'Component 3 (out of 10)' },
+    { key: 'component1', label: 'Component 1 (out of 10)' }
   ],
   review3: [
+    { key: 'component1', label: 'Component 1 (out of 10)' }
+  ],
+  review4: [
     { key: 'component1', label: 'Component 1 (out of 10)' },
     { key: 'component2', label: 'Component 2 (out of 10)' },
     { key: 'component3', label: 'Component 3 (out of 10)' },
@@ -38,195 +39,137 @@ const PopupReview = ({
   requestPending = false,
   pptApproved,
 }) => {
-  // RESET: Fresh state initialization
   const [marks, setMarks] = useState({});
   const [comments, setComments] = useState({});
   const [attendance, setAttendance] = useState({});
   const [teamPptApproved, setTeamPptApproved] = useState(false);
 
-  const showAttendanceAndPPT = ['review1', 'review2', 'review3'].includes(reviewType);
+  // ALL REVIEWS NOW HAVE ATTENDANCE
+  const showAttendance = true;
 
-  // RESET: Clear state when popup opens
   useEffect(() => {
     if (isOpen && teamMembers) {
-      console.log('=== POPUP REVIEW RESET AND INIT ===');
-      console.log('Review type:', reviewType);
-      console.log('Locked status:', locked);
-      console.log('Request edit visible:', requestEditVisible);
-      console.log('Request pending:', requestPending);
-      
-      // RESET: Clear all previous state
       setMarks({});
       setComments({});
       setAttendance({});
       setTeamPptApproved(false);
-      
+
       const initialMarks = {};
       const initialComments = {};
       const initialAttendance = {};
-      
-      teamMembers.forEach(member => {
+
+      teamMembers.forEach((member) => {
         if (reviewType === 'review0') {
           initialMarks[member._id] = member.review0?.component1 ?? '';
-        } else if (reviewType === 'draftReview') {
+        } else {
+          const review = member[reviewType] || {};
           initialMarks[member._id] = {
-            component1: member.draftReview?.component1 ?? '',
-            component2: member.draftReview?.component2 ?? '',
-            component3: member.draftReview?.component3 ?? '',
-          };
-        } else if (reviewType === 'review1') {
-          initialMarks[member._id] = {
-            component1: member.review1?.component1 ?? '',
-            component2: member.review1?.component2 ?? '',
-            component3: member.review1?.component3 ?? '',
-          };
-        } else if (reviewType === 'review2') {
-          initialMarks[member._id] = {
-            component1: member.review2?.component1 ?? '',
-            component2: member.review2?.component2 ?? '',
-            component3: member.review2?.component3 ?? '',
-          };
-        } else if (reviewType === 'review3') {
-          initialMarks[member._id] = {
-            component1: member.review3?.component1 ?? '',
-            component2: member.review3?.component2 ?? '',
-            component3: member.review3?.component3 ?? '',
+            component1: review.component1 ?? '',
+            component2: review.component2 ?? '',
+            component3: review.component3 ?? '',
           };
         }
-        
-        initialComments[member._id] = member.comments || '';
-        
-        if (showAttendanceAndPPT) {
-          initialAttendance[member._id] = member.attendance?.value ?? false;
-          console.log(`Student ${member.name} PPT status:`, member.pptApproved?.approved);
-          console.log(`Student ${member.name} attendance:`, member.attendance?.value);
-        }
+        initialComments[member._id] = (member[reviewType]?.comments) || '';
+        // ALL REVIEWS NOW SUPPORT ATTENDANCE
+        initialAttendance[member._id] = member[reviewType]?.attendance?.value ?? true;
       });
-      
+
       setMarks(initialMarks);
       setComments(initialComments);
-      
-      if (showAttendanceAndPPT) {
-        setAttendance(initialAttendance);
-        
-        const teamPptStatus = teamMembers.length > 0 && 
-          teamMembers.every(member => member.pptApproved?.approved === true);
-        
-        console.log('Calculated team PPT status from students:', teamPptStatus);
+      setAttendance(initialAttendance);
+
+      if (['review1', 'review2', 'review3', 'review4'].includes(reviewType)) {
+        const teamPptStatus =
+          teamMembers.length > 0 &&
+          teamMembers.every((member) => member.pptApproved?.approved === true);
         setTeamPptApproved(teamPptStatus);
       }
     }
-  }, [isOpen, teamMembers, reviewType, showAttendanceAndPPT, pptApproved, locked, requestEditVisible, requestPending]);
+  }, [isOpen, teamMembers, reviewType, pptApproved, locked, requestEditVisible, requestPending]);
 
   const handleMarksChange = (memberId, value, component = null) => {
-    if (locked) {
-      console.log('❌ Marks change blocked - review is locked');
-      return;
-    }
-    
-    if (['review1', 'review2', 'review3'].includes(reviewType) && attendance[memberId] === false) {
-      console.log('❌ Blocked marks change - student is absent');
-      return;
-    }
-    
+    if (locked) return;
+    if (attendance[memberId] === false) return;
+
     const numValue = Number(value);
     if (numValue > 10) {
-      alert("Enter value less than 10, resetting to 0");
+      alert('Enter value less than 10, resetting to 0');
       if (component) {
-        setMarks(prev => ({
+        setMarks((prev) => ({
           ...prev,
           [memberId]: {
             ...prev[memberId],
-            [component]: 0
-          }
+            [component]: 0,
+          },
         }));
       } else {
-        setMarks(prev => ({ ...prev, [memberId]: 0 }));
+        setMarks((prev) => ({ ...prev, [memberId]: 0 }));
       }
     } else {
       if (component) {
-        setMarks(prev => ({
+        setMarks((prev) => ({
           ...prev,
           [memberId]: {
             ...prev[memberId],
-            [component]: numValue
-          }
+            [component]: numValue,
+          },
         }));
       } else {
-        setMarks(prev => ({ ...prev, [memberId]: numValue }));
+        setMarks((prev) => ({ ...prev, [memberId]: numValue }));
       }
     }
   };
 
   const handleAttendanceChange = (memberId, isPresent) => {
     if (locked) return;
-    
-    console.log(`Setting attendance for student ${memberId} to:`, isPresent);
-    setAttendance(prev => ({ ...prev, [memberId]: isPresent }));
-    
+    setAttendance((prev) => ({ ...prev, [memberId]: isPresent }));
     if (!isPresent) {
-      console.log(`Student ${memberId} marked absent - zeroing marks and comments`);
-      
       if (reviewType === 'review0') {
-        setMarks(prev => ({ ...prev, [memberId]: 0 }));
-      } else if (['draftReview', 'review1', 'review2', 'review3'].includes(reviewType)) {
-        setMarks(prev => ({
+        setMarks((prev) => ({ ...prev, [memberId]: 0 }));
+      } else {
+        setMarks((prev) => ({
           ...prev,
           [memberId]: {
             component1: 0,
             component2: 0,
-            component3: 0
-          }
+            component3: 0,
+          },
         }));
       }
-      setComments(prev => ({ ...prev, [memberId]: '' }));
+      setComments((prev) => ({ ...prev, [memberId]: '' }));
     }
   };
 
   const handleSubmit = () => {
     if (locked) return;
-    
-    console.log('=== SUBMIT STARTED ===');
-    console.log('Review type:', reviewType);
-    console.log('Current teamPptApproved state:', teamPptApproved);
-    
+
     const submission = {};
-    teamMembers.forEach(member => {
+    teamMembers.forEach((member) => {
       if (reviewType === 'review0') {
         submission[member.regNo] = {
           component1: marks[member._id] || 0,
-          comments: comments[member._id] || ''
-        };
-      } else if (reviewType === 'draftReview') {
-        const memberMarks = marks[member._id] || {};
-        submission[member.regNo] = {
-          component1: memberMarks.component1 || 0,
-          component2: memberMarks.component2 || 0,
-          component3: memberMarks.component3 || 0,
-          comments: comments[member._id] || ''
-        };
-      } else if (['review1', 'review2', 'review3'].includes(reviewType)) {
-        const memberMarks = marks[member._id] || {};
-        submission[member.regNo] = {
-          component1: memberMarks.component1 || 0,
-          component2: memberMarks.component2 || 0,
-          component3: memberMarks.component3 || 0,
+          attendance: { value: attendance[member._id] !== false },
           comments: comments[member._id] || '',
-          attendance: { value: attendance[member._id] }
+        };
+      } else {
+        const memberMarks = marks[member._id] || {};
+        submission[member.regNo] = {
+          component1: memberMarks.component1 || 0,
+          component2: memberMarks.component2 || 0,
+          component3: memberMarks.component3 || 0,
+          attendance: { value: attendance[member._id] !== false },
+          comments: comments[member._id] || '',
         };
       }
     });
-    
-    console.log('Submission data:', submission);
-    
-    if (['review1', 'review2', 'review3'].includes(reviewType)) {
+
+    if (['review1', 'review2', 'review3', 'review4'].includes(reviewType)) {
       const teamPptObj = {
         pptApproved: {
           approved: teamPptApproved,
-          locked: false
-        }
+          locked: false,
+        },
       };
-      console.log('Submitting team PPT object:', teamPptObj);
       onSubmit(submission, teamPptObj);
     } else {
       onSubmit(submission);
@@ -249,100 +192,11 @@ const PopupReview = ({
             <X size={24} />
           </button>
         </div>
-
-        {/* FIXED: Enhanced debug logging for banner visibility */}
-        {locked && (
-          <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 flex justify-between items-center">
-            <span>This review is locked. Deadline has passed and no edit permission granted.</span>
-            {(() => {
-              console.log('=== BANNER BUTTON LOGIC ===');
-              console.log('Request edit visible:', requestEditVisible);
-              console.log('Request pending:', requestPending);
-              console.log('Should show request button:', requestEditVisible && !requestPending);
-              console.log('Should show pending button:', requestPending);
-              
-              if (requestEditVisible && !requestPending) {
-                return (
-                  <button
-                    onClick={() => {
-                      console.log('🔵 REQUEST EDIT BUTTON CLICKED');
-                      onRequestEdit();
-                    }}
-                    className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm ml-4"
-                  >
-                    Request Edit
-                  </button>
-                );
-              }
-              
-              if (requestPending) {
-                return (
-                  <button
-                    disabled
-                    className="px-3 py-1 bg-yellow-400 text-white rounded cursor-not-allowed text-sm ml-4"
-                  >
-                    Request Pending
-                  </button>
-                );
-              }
-              
-              return null;
-            })()}
-          </div>
-        )}
-
         <div className="p-4 max-h-[70vh] overflow-y-auto">
-          {showAttendanceAndPPT && (
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg border">
-              <h3 className="text-lg font-semibold mb-3">Team PPT Approval</h3>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="teamPpt"
-                    checked={teamPptApproved === true}
-                    onChange={() => {
-                      if (!locked) {
-                        console.log('Setting team PPT to APPROVED');
-                        setTeamPptApproved(true);
-                      }
-                    }}
-                    disabled={locked}
-                    className="mr-2"
-                  />
-                  <span className="text-green-600 font-semibold">Approved</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="teamPpt"
-                    checked={teamPptApproved === false}
-                    onChange={() => {
-                      if (!locked) {
-                        console.log('Setting team PPT to NOT APPROVED');
-                        setTeamPptApproved(false);
-                      }
-                    }}
-                    disabled={locked}
-                    className="mr-2"
-                  />
-                  <span className="text-red-600 font-semibold">Not Approved</span>
-                </label>
-              </div>
-              <div className="mt-2 text-sm text-gray-600">
-                Current state: {teamPptApproved ? 'Approved' : 'Not Approved'}
-              </div>
-            </div>
-          )}
-
           {teamMembers.map((member) => {
-            const isAbsent = ['review1', 'review2', 'review3'].includes(reviewType) && attendance[member._id] === false;
-            
+            const isAbsent = attendance[member._id] === false;
             return (
-              <div
-                key={member._id}
-                className="py-4 border-b last:border-b-0"
-              >
+              <div key={member._id} className="py-4 border-b last:border-b-0">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <span className="font-medium text-gray-700">{member.name}</span>
@@ -361,16 +215,18 @@ const PopupReview = ({
                           type="number"
                           min="0"
                           max="10"
-                          className="w-20 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className={`w-20 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                            isAbsent ? 'bg-gray-100 cursor-not-allowed' : ''
+                          }`}
                           value={marks[member._id] || ''}
                           onChange={(e) => handleMarksChange(member._id, e.target.value)}
                           placeholder="0-10"
-                          disabled={locked}
+                          disabled={locked || isAbsent}
                         />
                       </div>
                     ) : (
                       <div className="flex gap-2">
-                        {components.map(comp => (
+                        {components.map((comp) => (
                           <div key={comp.key} className="flex items-center gap-1">
                             <label className="text-xs">{comp.label.split(' ')[0]}:</label>
                             <input
@@ -381,7 +237,9 @@ const PopupReview = ({
                                 isAbsent ? 'bg-gray-100 cursor-not-allowed' : ''
                               }`}
                               value={marks[member._id]?.[comp.key] || ''}
-                              onChange={(e) => handleMarksChange(member._id, e.target.value, comp.key)}
+                              onChange={(e) =>
+                                handleMarksChange(member._id, e.target.value, comp.key)
+                              }
                               placeholder="0-10"
                               disabled={locked || isAbsent}
                             />
@@ -391,72 +249,82 @@ const PopupReview = ({
                     )}
                   </div>
                 </div>
-
-                <div className={`grid gap-4 ${showAttendanceAndPPT ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">
-                      {['review2', 'review3'].includes(reviewType) ? 'Panel Comments' : 'Guide Comments'}
+                      Comments
                     </label>
                     <textarea
                       className={`w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                         isAbsent ? 'bg-gray-100 cursor-not-allowed' : ''
                       }`}
-                      placeholder={['review2', 'review3'].includes(reviewType) ? 'Enter Panel Comments' : 'Enter Guide Comments'}
+                      placeholder="Enter Comments"
                       rows="2"
                       value={comments[member._id] || ''}
                       onChange={(e) => {
                         if (!locked && !isAbsent) {
-                          setComments(prev => ({ ...prev, [member._id]: e.target.value }));
+                          setComments((prev) => ({ ...prev, [member._id]: e.target.value }));
                         }
                       }}
                       disabled={locked || isAbsent}
                     />
                   </div>
-
-                  {showAttendanceAndPPT && (
-                    <div>
-                      <label className="block text-gray-700 text-sm font-medium mb-2">
-                        Attendance
+                  <div>
+                    <label className="block text-gray-700 text-sm font-medium mb-2">
+                      Attendance
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name={`attendance_${member._id}`}
+                          checked={attendance[member._id] === true}
+                          onChange={() => handleAttendanceChange(member._id, true)}
+                          disabled={locked}
+                          className="mr-2"
+                        />
+                        Present
                       </label>
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name={`attendance_${member._id}`}
-                            checked={attendance[member._id] === true}
-                            onChange={() => handleAttendanceChange(member._id, true)}
-                            disabled={locked}
-                            className="mr-2"
-                          />
-                          Present
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name={`attendance_${member._id}`}
-                            checked={attendance[member._id] === false}
-                            onChange={() => handleAttendanceChange(member._id, false)}
-                            disabled={locked}
-                            className="mr-2"
-                          />
-                          Absent
-                        </label>
-                      </div>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name={`attendance_${member._id}`}
+                          checked={attendance[member._id] === false}
+                          onChange={() => handleAttendanceChange(member._id, false)}
+                          disabled={locked}
+                          className="mr-2"
+                        />
+                        Absent
+                      </label>
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             );
           })}
-          
+
+          {/* PPT Approval Section for Final Reviews */}
+          {['review1', 'review2', 'review3', 'review4'].includes(reviewType) && (
+            <div className="mt-6 p-4 bg-gray-50 rounded">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={teamPptApproved}
+                  onChange={(e) => setTeamPptApproved(e.target.checked)}
+                  disabled={locked}
+                  className="mr-2"
+                />
+                <span className="text-sm font-medium">Approve PPT for entire team</span>
+              </label>
+            </div>
+          )}
+
           <div className="mt-6 flex justify-end">
             <button
               onClick={handleSubmit}
               disabled={locked}
               className={`px-6 py-2 rounded transition-colors ${
-                locked 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-500 hover:bg-blue-600'
+                locked ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
               } text-white`}
             >
               Submit Review

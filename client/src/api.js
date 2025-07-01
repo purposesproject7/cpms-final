@@ -21,6 +21,18 @@ export const adminLogin = (data) => API.post("/auth/login", data);
 // Admin endpoints
 export const getAllPanelProjects = () => API.get("/admin/getAllPanelProjects");
 export const getAllGuideProjects = () => API.get("/admin/getAllGuideProjects");
+// Add this to your api.js file
+
+export const getAllProjects = async () => {
+  try {
+    const response = await axios.get('/api/admin/getAllProjects');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching all projects:', error);
+    throw error;
+  }
+};
+
 
 // Faculty endpoint
 export const getAllFaculty = () => API.get("/admin/getAllFaculty");

@@ -19,8 +19,15 @@ const requestSchema = mongoose.Schema({
   },
   reviewType: {
     type: String,
-    
-    enum: ["draftReview", "review0", "review1", "review2", "review3"],
+
+    enum: [
+      "draftReview",
+      "review0",
+      "review1",
+      "review2",
+      "review3",
+      "review4",
+    ],
     required: true,
   },
   reason: {

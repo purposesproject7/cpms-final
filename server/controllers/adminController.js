@@ -10,8 +10,9 @@ import Panel from "../models/panelSchema.js";
 export async function createFaculty(req, res) {
   const { name, emailId, password, employeeId } = req.body;
 
+  // for otp testing used gmail - need some profs mail id for checking with vit.ac.in
   // Only allow college emails
-  if (!emailId.endsWith("@vitstudent.ac.in")) {
+  if (!emailId.endsWith("@vit.ac.in")) {
     return res.status(400).json({ 
       success: false,
       message: "Only college emails allowed!" 
@@ -408,20 +409,14 @@ export async function deletePanel(req, res) {
 
 export async function getAllPanels(req, res) {
   const panel = await Panel.find().populate("faculty1").populate("faculty2");
-  
-  if (!panel || panel.length === 0) {
-    return res.status(404).json({ 
-      success: false,
-      message: "No panels found" 
-    });
-  }
-
+  // FIX: Always return 200 with empty array if no panels
   return res.status(200).json({
     success: true,
     message: "Operation Successful",
-    data: panel,
+    data: panel || [],
   });
 }
+
 
 export async function assignExistingPanelToProject(req, res) {
   const { panelId, projectId } = req.body;
@@ -463,69 +458,53 @@ export async function assignExistingPanelToProject(req, res) {
   });
 }
 
+
+
 export async function autoAssignPanelsToProjects(req, res) {
   const unassignedProjects = await Project.find({ panel: null }).populate("guideFaculty");
   const panels = await Panel.find().populate(["faculty1", "faculty2"]);
 
-  if (unassignedProjects.length === 0) {
-    return res.status(200).json({ 
-      success: true,
-      message: "All projects already have panels." 
-    });
+  if (!panels.length) {
+    return res.status(400).json({ success: false, message: "No panels available." });
   }
 
-  if (panels.length === 0) {
-    return res.status(400).json({ 
-      success: false,
-      message: "No panels available." 
-    });
-  }
+  // Initialize a map to hold assignments
+  const panelAssignments = {};
+  panels.forEach(panel => {
+    panelAssignments[panel._id.toString()] = [];
+  });
 
-  // Build a panel usage map: panelId => project count
-  const panelProjectCounts = {};
-  for (const panel of panels) {
-    const count = await Project.countDocuments({ panel: panel._id });
-    panelProjectCounts[panel._id.toString()] = count;
-  }
-
+  // Distribute projects equally (round-robin)
+  let panelIndex = 0;
   for (const project of unassignedProjects) {
-    const guideId = project.guideFaculty._id.toString();
-
-    // Filter out panels where the guide is one of the members
-    const eligiblePanels = panels.filter((panel) => {
-      return (
+    // Optionally: skip panels where guide is a member
+    const guideId = project.guideFaculty?._id?.toString();
+    let eligiblePanels = panels;
+    if (guideId) {
+      eligiblePanels = panels.filter(panel =>
         panel.faculty1._id.toString() !== guideId &&
         panel.faculty2._id.toString() !== guideId
       );
-    });
-
-    if (eligiblePanels.length === 0) {
-      console.warn(`No eligible panel found for project: ${project.name}`);
-      continue;
+      // If none eligible, allow all panels
+      if (!eligiblePanels.length) eligiblePanels = panels;
     }
 
-    // Select the eligible panel with the least number of assigned projects
-    const [leastUsedPanelId] = eligiblePanels
-      .map((panel) => ({
-        panelId: panel._id.toString(),
-        count: panelProjectCounts[panel._id.toString()] || 0,
-      }))
-      .sort((a, b) => a.count - b.count)
-      .map((entry) => entry.panelId);
-
-    // Assign panel to project
-    project.panel = leastUsedPanelId;
+    // Assign to next eligible panel in round-robin
+    const eligiblePanel = eligiblePanels[panelIndex % eligiblePanels.length];
+    project.panel = eligiblePanel._id;
     await project.save();
+    panelAssignments[eligiblePanel._id.toString()].push(project._id);
 
-    // Update count
-    panelProjectCounts[leastUsedPanelId]++;
+    panelIndex++;
   }
 
   return res.status(200).json({
     success: true,
-    message: "Panels assigned automatically to unassigned projects.",
+    message: "Panels assigned equally to unassigned projects.",
+    assignments: panelAssignments,
   });
 }
+
 
 export async function assignPanelToProject(req, res) {
   const { panelFacultyIds, projectId } = req.body;

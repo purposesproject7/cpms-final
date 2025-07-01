@@ -26,7 +26,7 @@ function UniversalNavbar({
             '/forgot-password',  // Fixed path format
             '/login',
             '/admin/login',
-            '/',           // Homepage
+            '/',           // Homepagehi
             '/Home'        // Homepage alternative
         ];
         
@@ -54,7 +54,9 @@ function UniversalNavbar({
         const hideProfilePaths = [
             '/login',
             '/admin/login',
-            '/forgot-password'  // Add forgot password to profile hide list
+            '/forgot-password',
+            
+            '/Home'  
         ];
         
         return !hideProfilePaths.some(path => 

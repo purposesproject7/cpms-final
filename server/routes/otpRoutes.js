@@ -4,8 +4,8 @@ import { sendOTP, verifyOTPAndResetPassword, resendOTP } from "../controllers/ot
 
 const otpRouter = express.Router();
 
-otpRouter.post("/send-otp", sendOTP);
-otpRouter.post("/verify-otp-reset", verifyOTPAndResetPassword);
-otpRouter.post("/resend-otp", resendOTP);
+otpRouter.post("/sendOtp", sendOTP);
+otpRouter.post("/verifyOtpReset", verifyOTPAndResetPassword);
+otpRouter.post("/resendOtp", resendOTP);
 
 export default otpRouter;

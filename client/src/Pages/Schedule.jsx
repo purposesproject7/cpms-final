@@ -24,6 +24,10 @@ function Schedule() {
   const [review3From, setReview3From] = useState(defaultDate);
   const [review3To, setReview3To] = useState(defaultDate);
 
+  // --- NEW: Review 4 ---
+  const [review4From, setReview4From] = useState(defaultDate);
+  const [review4To, setReview4To] = useState(defaultDate);
+
   const [pptApprovedFrom, setPptApprovedFrom] = useState(defaultDate);
   const [pptApprovedTo, setPptApprovedTo] = useState(defaultDate);
 
@@ -62,6 +66,11 @@ function Schedule() {
             setReview3From(new Date(d.review3.from));
             setReview3To(new Date(d.review3.to));
           }
+          // --- NEW: Review 4 ---
+          if (d.review4) {
+            setReview4From(new Date(d.review4.from));
+            setReview4To(new Date(d.review4.to));
+          }
           if (d.pptApproved) {
             setPptApprovedFrom(new Date(d.pptApproved.from));
             setPptApprovedTo(new Date(d.pptApproved.to));
@@ -91,6 +100,7 @@ function Schedule() {
         review1To > review1From &&
         review2To > review2From &&
         review3To > review3From &&
+        review4To > review4From && // NEW: Validate review 4
         pptApprovedTo > pptApprovedFrom &&
         attendanceTo > attendanceFrom
       )
@@ -122,6 +132,11 @@ function Schedule() {
         review3: {
           from: review3From.toISOString(),
           to: review3To.toISOString(),
+        },
+        // --- NEW: Review 4 ---
+        review4: {
+          from: review4From.toISOString(),
+          to: review4To.toISOString(),
         },
         pptApproved: {
           from: pptApprovedFrom.toISOString(),
@@ -275,6 +290,30 @@ function Schedule() {
                             <DatePicker
                               selected={review3To}
                               onChange={setReview3To}
+                              showTimeSelect
+                              dateFormat="MMMM d, yyyy h:mm aa"
+                              className="text-center border-2 border-gray-400 "
+                            />
+                          </td>
+                        </tr>
+                        {/* --- NEW: Review 4 --- */}
+                        <tr className="bg-white">
+                          <td className="p-3 border border-gray-300">
+                            Review 4
+                          </td>
+                          <td className="p-3 border border-gray-300 text-center">
+                            <DatePicker
+                              selected={review4From}
+                              onChange={setReview4From}
+                              showTimeSelect
+                              dateFormat="MMMM d, yyyy h:mm aa"
+                              className="text-center border-2 border-gray-400 "
+                            />
+                          </td>
+                          <td className="p-3 border border-gray-300 text-center">
+                            <DatePicker
+                              selected={review4To}
+                              onChange={setReview4To}
                               showTimeSelect
                               dateFormat="MMMM d, yyyy h:mm aa"
                               className="text-center border-2 border-gray-400 "
