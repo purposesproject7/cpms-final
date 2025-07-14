@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import PopupReview from 'client/src/components/PopupReview.jsx';
+import PopupReview from '../components/PopupReview';
 import ReviewTable from '../components/ReviewTable';
-import Navbar from '../components/UniversalNavbar';
+import CreateProject from '../components/CreateProject';
+import Navbar from '../Components/UniversalNavbar';
 import { ChevronRight } from 'lucide-react';
 import { 
   getGuideProjects, 
@@ -9,9 +10,9 @@ import {
   updateProject,
   createReviewRequest,
   checkRequestStatus,
-  checkAllRequestStatuses
+  checkAllRequestStatuses,
+  createProject
 } from '../api';
-
 const Guide = () => {
   const [teams, setTeams] = useState([]);
   const [deadlines, setDeadlines] = useState({});
