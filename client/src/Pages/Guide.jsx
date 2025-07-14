@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import PopupReview from '../Components/PopupReview';
-import ReviewTable from '../Components/ReviewTable';
-import CreateProject from '../Components/CreateProject';
+import PopupReview from '../components/PopupReview';
+import ReviewTable from '../components/ReviewTable';
 import Navbar from '../Components/UniversalNavbar';
 import { ChevronRight } from 'lucide-react';
 import { 
@@ -10,8 +9,7 @@ import {
   updateProject,
   createReviewRequest,
   checkRequestStatus,
-  checkAllRequestStatuses,
-  createProject
+  checkAllRequestStatuses
 } from '../api';
 
 const Guide = () => {
@@ -21,7 +19,6 @@ const Guide = () => {
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [requestStatuses, setRequestStatuses] = useState({});
-  const [showCreateProject, setShowCreateProject] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -85,7 +82,7 @@ const Guide = () => {
     }
   };
 
-  // Team-level deadline checking using nested deadline structure
+  // FIXED: Team-level deadline checking using nested deadline structure
   const isTeamDeadlinePassed = (reviewType, teamId) => {
     console.log(`=== TEAM DEADLINE CHECK FOR ${reviewType} ===`);
     
@@ -202,45 +199,31 @@ const Guide = () => {
         
         const updateData = {
           studentId: student._id,
+          comments: studentReviewData.comments
         };
 
-        // FIXED: Guide only handles draftReview, review0, and review1 + COMMENTS
-        if (reviewType === 'draftReview') {
+        if (reviewType === 'review0') {
+          updateData.review0 = {
+            component1: studentReviewData.component1 || null,
+            locked: studentReviewData.locked || false
+          };
+        } else if (reviewType === 'draftReview') {
           updateData.draftReview = {
             component1: studentReviewData.component1 || null,
             component2: studentReviewData.component2 || null,
             component3: studentReviewData.component3 || null,
-            attendance: {
-              value: studentReviewData.attendance?.value || false,
-              locked: studentReviewData.attendance?.locked || false
-            },
-            comments: studentReviewData.comments || '', // ADDED: Comments
-            locked: studentReviewData.locked || false
-          };
-        } else if (reviewType === 'review0') {
-          updateData.review0 = {
-            component1: studentReviewData.component1 || null,
-            attendance: {
-              value: studentReviewData.attendance?.value || false,
-              locked: studentReviewData.attendance?.locked || false
-            },
-            comments: studentReviewData.comments || '', // ADDED: Comments
             locked: studentReviewData.locked || false
           };
         } else if (reviewType === 'review1') {
-          // review1 is the FINAL review for Guide
           updateData.review1 = {
             component1: studentReviewData.component1 || null,
             component2: studentReviewData.component2 || null,
             component3: studentReviewData.component3 || null,
-            attendance: {
-              value: studentReviewData.attendance?.value || false,
-              locked: studentReviewData.attendance?.locked || false
-            },
-            comments: studentReviewData.comments || '', // ADDED: Comments
             locked: studentReviewData.locked || false
           };
-          // Handle PPT approval for final review
+          if (studentReviewData.attendance) {
+            updateData.attendance = studentReviewData.attendance;
+          }
           if (pptObj && pptObj.pptApproved) {
             updateData.pptApproved = pptObj.pptApproved;
           }
@@ -257,8 +240,6 @@ const Guide = () => {
       if (reviewType === 'review1' && pptObj) {
         updatePayload.pptApproved = pptObj.pptApproved;
       }
-
-      console.log('Final guide update payload:', JSON.stringify(updatePayload, null, 2));
 
       const response = await updateProject(updatePayload);
       
@@ -306,44 +287,6 @@ const Guide = () => {
     }
   };
 
-
-// In your Guide component, update the CreateProject integration:
-
-const handleCreateProject = async (projectData) => {
-  try {
-    const currentUser = JSON.parse(localStorage.getItem('faculty') || '{}');
-    const payload = {
-      name: projectData.name,
-      students: projectData.students,
-      guideFacultyEmpId: currentUser.employeeId,
-    };
-    
-    const response = await createProject(payload);
-
-    if (response.success) {
-      await fetchData(); // Refetch project list so UI updates
-      return true; // Return success to CreateProject component
-    } else {
-      throw new Error(response.message || 'Failed to create project');
-    }
-  } catch (error) {
-    console.error('Error creating project:', error);
-    alert('Error creating project: ' + error.message);
-    return false; // Return failure to CreateProject component
-  }
-};
-
-// Update the CreateProject component call in your JSX:
-{showCreateProject && (
-  <CreateProject
-    isOpen={showCreateProject}
-    onClose={() => setShowCreateProject(false)}
-    onSuccess={handleCreateProject} // ✅ CORRECT: Use onSuccess, not onSubmit
-  />
-)}
-
-
-
   if (loading) {
     return (
       <>
@@ -363,12 +306,6 @@ const handleCreateProject = async (projectData) => {
           <div className="bg-white shadow-md rounded-md">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold text-black pl-5 mt-2">Guide</h2>
-              <button
-                onClick={() => setShowCreateProject(true)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors mr-5"
-              >
-                Create Project
-              </button>
             </div>
             
             {teams.length === 0 ? (
@@ -398,22 +335,22 @@ const handleCreateProject = async (projectData) => {
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setActivePopup({ type: 'draftReview', teamId: team.id })}
-                          className="px-4 py-2 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition-colors"
-                        >
-                          Draft Review
-                        </button>
-                        <button
                           onClick={() => setActivePopup({ type: 'review0', teamId: team.id })}
                           className="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition-colors"
                         >
                           Review 0
                         </button>
                         <button
+                          onClick={() => setActivePopup({ type: 'draftReview', teamId: team.id })}
+                          className="px-4 py-2 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition-colors"
+                        >
+                          Draft Review
+                        </button>
+                        <button
                           onClick={() => setActivePopup({ type: 'review1', teamId: team.id })}
                           className="px-4 py-2 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
                         >
-                          Final Review
+                          Guide Review
                         </button>
                       </div>
                     </div>
@@ -424,7 +361,6 @@ const handleCreateProject = async (projectData) => {
                         requestStatuses={requestStatuses}
                         isDeadlinePassed={(reviewType) => isTeamDeadlinePassed(reviewType, team.id)}
                         isReviewLocked={(student, reviewType) => isReviewLocked(student, reviewType, team.id)}
-                        panelMode={false}
                       />
                     )}
                   </div>
@@ -432,29 +368,6 @@ const handleCreateProject = async (projectData) => {
               ))
             )}
           </div>
-
-          {activePopup?.type === 'draftReview' && (
-            <PopupReview
-              title="Draft Review"
-              teamMembers={teams.find(t => t.id === activePopup.teamId).students}
-              reviewType="draftReview"
-              isOpen={true}
-              locked={isTeamDeadlinePassed('draftReview', activePopup.teamId)}
-              onClose={() => setActivePopup(null)}
-              onSubmit={(data) => {
-                handleReviewSubmit(activePopup.teamId, 'draftReview', data);
-                setActivePopup(null);
-              }}
-              onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'draftReview')}
-              requestEditVisible={(() => {
-                const team = teams.find(t => t.id === activePopup.teamId);
-                const isLocked = isTeamDeadlinePassed('draftReview', activePopup.teamId);
-                const requestStatus = getTeamRequestStatus(team, 'draftReview');
-                return isLocked && requestStatus === 'none';
-              })()}
-              requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'draftReview') === 'pending'}
-            />
-          )}
 
           {activePopup?.type === 'review0' && (
             <PopupReview
@@ -479,9 +392,32 @@ const handleCreateProject = async (projectData) => {
             />
           )}
 
+          {activePopup?.type === 'draftReview' && (
+            <PopupReview
+              title="Draft Review"
+              teamMembers={teams.find(t => t.id === activePopup.teamId).students}
+              reviewType="draftReview"
+              isOpen={true}
+              locked={isTeamDeadlinePassed('draftReview', activePopup.teamId)}
+              onClose={() => setActivePopup(null)}
+              onSubmit={(data) => {
+                handleReviewSubmit(activePopup.teamId, 'draftReview', data);
+                setActivePopup(null);
+              }}
+              onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'draftReview')}
+              requestEditVisible={(() => {
+                const team = teams.find(t => t.id === activePopup.teamId);
+                const isLocked = isTeamDeadlinePassed('draftReview', activePopup.teamId);
+                const requestStatus = getTeamRequestStatus(team, 'draftReview');
+                return isLocked && requestStatus === 'none';
+              })()}
+              requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'draftReview') === 'pending'}
+            />
+          )}
+
           {activePopup?.type === 'review1' && (
             <PopupReview
-              title="Final Review"
+              title="Guide Review"
               teamMembers={teams.find(t => t.id === activePopup.teamId).students}
               reviewType="review1"
               pptApproved={{
@@ -507,14 +443,6 @@ const handleCreateProject = async (projectData) => {
                 return isLocked && requestStatus === 'none';
               })()}
               requestPending={getTeamRequestStatus(teams.find(t => t.id === activePopup.teamId), 'review1') === 'pending'}
-            />
-          )}
-
-          {showCreateProject && (
-            <CreateProject
-              isOpen={showCreateProject}
-              onClose={() => setShowCreateProject(false)}
-              onSubmit={handleCreateProject}
             />
           )}
         </div>
