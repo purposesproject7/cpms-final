@@ -432,7 +432,7 @@ const Guide = () => {
               locked={isTeamDeadlinePassed('review1', activePopup.teamId)}
               onClose={() => setActivePopup(null)}
               onSubmit={(data, pptObj) => {
-                handleReviewSubmit(activePopup.teamId, 'review1', data, pptObj);
+                handleReviewSubmit(activePopup.teamId, 'review1', data, pptObj); 
                 setActivePopup(null);
               }}
               onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review1')}
