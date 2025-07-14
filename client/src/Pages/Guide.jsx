@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import PopupReview from '../components/PopupReview';
+import PopupReview from 'src/components/PopupReview';
 import ReviewTable from '../components/ReviewTable';
 import Navbar from '../Components/UniversalNavbar';
 import { ChevronRight } from 'lucide-react';
