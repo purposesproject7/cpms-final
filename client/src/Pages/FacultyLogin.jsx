@@ -49,6 +49,7 @@ const FacultyLogin = () => {
       const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
         emailId: loginEmail,
         password: loginPassword,
+        expectedRole: "faculty"
       });
 
       console.log('Login response:', response.data);
