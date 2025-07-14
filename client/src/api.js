@@ -3,7 +3,7 @@ import axios from "axios";
 const API_BASE_URL = import.meta.env.VITE_API_URL; // Define base URL constant
 
 const API = axios.create({
-  baseURL: `${API_BASE_URL}/api`, // Use the constant
+  baseURL: `${API_BASE_URL}`, // Use the constant
 });
 
 // Add authorization token to all requests if available
