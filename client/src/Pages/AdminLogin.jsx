@@ -29,7 +29,7 @@ const AdminLogin = () => {
     setIsLoading(true);
 
     try {
-      const response = await adminLogin({ emailId: email, password });
+      const response = await adminLogin({ emailId: email, password ,expectedRole: "admin"});
       const token = response.data?.token;
 
       if (!token) throw new Error('No token received');
