@@ -24,7 +24,7 @@ const AdminPanelManagement = () => {
   const [confirmRemove, setConfirmRemove] = useState({ type: '', panelIndex: null, teamId: null });
   const [expandedPanel, setExpandedPanel] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showDebug, setShowDebug] = useState(false);
+  // const [showDebug, setShowDebug] = useState(false);
   const [loading, setLoading] = useState(true);
   const [unassignedTeams, setUnassignedTeams] = useState([]);
 
@@ -228,12 +228,12 @@ const AdminPanelManagement = () => {
               <h2 className="font-semibold font-roboto text-3xl">
                 Panel Management
               </h2>
-              <button
+              {/* <button
                 onClick={() => setShowDebug(!showDebug)}
                 className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300"
               >
                 {showDebug ? 'Hide Debug' : 'Show Debug'}
-              </button>
+              </button> */}
             </div>
 
             {/* Only show counts for faculty and panels */}
