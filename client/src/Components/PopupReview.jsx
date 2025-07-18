@@ -38,6 +38,8 @@ const PopupReview = ({
   requestEditVisible = false,
   requestPending = false,
   pptApproved,
+  hasAttendance = false, // NEW: Control attendance visibility
+  hasPPTApproval = false, // NEW: Control PPT approval visibility
 }) => {
   // RESET: Fresh state initialization
   const [marks, setMarks] = useState({});
@@ -45,13 +47,17 @@ const PopupReview = ({
   const [attendance, setAttendance] = useState({});
   const [teamPptApproved, setTeamPptApproved] = useState(false);
 
-  const showAttendanceAndPPT = ['review1', 'review2', 'review3'].includes(reviewType);
+  // UPDATED: Use props instead of hardcoded logic
+  const showAttendance = hasAttendance;
+  const showPPTApproval = hasPPTApproval;
 
   // RESET: Clear state when popup opens
   useEffect(() => {
     if (isOpen && teamMembers) {
       console.log('=== POPUP REVIEW RESET AND INIT ===');
       console.log('Review type:', reviewType);
+      console.log('Has attendance:', hasAttendance);
+      console.log('Has PPT approval:', hasPPTApproval);
       console.log('Locked status:', locked);
       console.log('Request edit visible:', requestEditVisible);
       console.log('Request pending:', requestPending);
@@ -84,32 +90,61 @@ const PopupReview = ({
         } else if (reviewType === 'review2') {
           initialMarks[member._id] = {
             component1: member.review2?.component1 ?? '',
-            component2: member.review2?.component2 ?? '',
-            component3: member.review2?.component3 ?? '',
           };
         } else if (reviewType === 'review3') {
           initialMarks[member._id] = {
-            component1: member.review3?.component1 ?? '',
-            component2: member.review3?.component2 ?? '',
-            component3: member.review3?.component3 ?? '',
+            component1: member.review3?.component1 ?? ''
+          };
+        } else if (reviewType === 'review4') {
+          initialMarks[member._id] = {
+            component1: member.review4?.component1 ?? '',
+            component2: member.review4?.component2 ?? '',
+            component3: member.review4?.component3 ?? '',
           };
         }
         
-        initialComments[member._id] = member.comments || '';
+        // UPDATED: Get comments from the specific review type
+        if (reviewType === 'review0') {
+          initialComments[member._id] = member.review0?.comments || '';
+        } else if (reviewType === 'draftReview') {
+          initialComments[member._id] = member.draftReview?.comments || '';
+        } else if (reviewType === 'review1') {
+          initialComments[member._id] = member.review1?.comments || '';
+        } else if (reviewType === 'review2') {
+          initialComments[member._id] = member.review2?.comments || '';
+        } else if (reviewType === 'review3') {
+          initialComments[member._id] = member.review3?.comments || '';
+        } else if (reviewType === 'review4') {
+          initialComments[member._id] = member.review4?.comments || '';
+        } else {
+          initialComments[member._id] = member.comments || '';
+        }
         
-        if (showAttendanceAndPPT) {
-          initialAttendance[member._id] = member.attendance?.value ?? false;
-          console.log(`Student ${member.name} PPT status:`, member.pptApproved?.approved);
-          console.log(`Student ${member.name} attendance:`, member.attendance?.value);
+        // UPDATED: Get attendance from the specific review type if hasAttendance is true
+        if (showAttendance) {
+          if (reviewType === 'review1') {
+            initialAttendance[member._id] = member.review1?.attendance?.value ?? false;
+          } else if (reviewType === 'review2') {
+            initialAttendance[member._id] = member.review2?.attendance?.value ?? false;
+          } else if (reviewType === 'review3') {
+            initialAttendance[member._id] = member.review3?.attendance?.value ?? false;
+          } else if (reviewType === 'review4') {
+            initialAttendance[member._id] = member.review4?.attendance?.value ?? false;
+          } else {
+            initialAttendance[member._id] = member.attendance?.value ?? false;
+          }
+          console.log(`Student ${member.name} attendance for ${reviewType}:`, initialAttendance[member._id]);
         }
       });
       
       setMarks(initialMarks);
       setComments(initialComments);
       
-      if (showAttendanceAndPPT) {
+      if (showAttendance) {
         setAttendance(initialAttendance);
-        
+      }
+      
+      if (showPPTApproval) {
         const teamPptStatus = teamMembers.length > 0 && 
           teamMembers.every(member => member.pptApproved?.approved === true);
         
@@ -117,7 +152,7 @@ const PopupReview = ({
         setTeamPptApproved(teamPptStatus);
       }
     }
-  }, [isOpen, teamMembers, reviewType, showAttendanceAndPPT, pptApproved, locked, requestEditVisible, requestPending]);
+  }, [isOpen, teamMembers, reviewType, hasAttendance, hasPPTApproval, pptApproved, locked, requestEditVisible, requestPending]);
 
   const handleMarksChange = (memberId, value, component = null) => {
     if (locked) {
@@ -125,7 +160,8 @@ const PopupReview = ({
       return;
     }
     
-    if (['review1', 'review2', 'review3'].includes(reviewType) && attendance[memberId] === false) {
+    // UPDATED: Only check attendance if hasAttendance is true
+    if (showAttendance && attendance[memberId] === false) {
       console.log('❌ Blocked marks change - student is absent');
       return;
     }
@@ -170,14 +206,15 @@ const PopupReview = ({
       
       if (reviewType === 'review0') {
         setMarks(prev => ({ ...prev, [memberId]: 0 }));
-      } else if (['draftReview', 'review1', 'review2', 'review3'].includes(reviewType)) {
+      } else if (['draftReview', 'review1', 'review2', 'review3', 'review4'].includes(reviewType)) {
+        const components = componentLabels[reviewType] || [];
+        const zeroedMarks = {};
+        components.forEach(comp => {
+          zeroedMarks[comp.key] = 0;
+        });
         setMarks(prev => ({
           ...prev,
-          [memberId]: {
-            component1: 0,
-            component2: 0,
-            component3: 0
-          }
+          [memberId]: zeroedMarks
         }));
       }
       setComments(prev => ({ ...prev, [memberId]: '' }));
@@ -189,6 +226,8 @@ const PopupReview = ({
     
     console.log('=== SUBMIT STARTED ===');
     console.log('Review type:', reviewType);
+    console.log('Has attendance:', showAttendance);
+    console.log('Has PPT approval:', showPPTApproval);
     console.log('Current teamPptApproved state:', teamPptApproved);
     
     const submission = {};
@@ -206,21 +245,57 @@ const PopupReview = ({
           component3: memberMarks.component3 || 0,
           comments: comments[member._id] || ''
         };
-      } else if (['review1', 'review2', 'review3'].includes(reviewType)) {
+      } else if (reviewType === 'review1') {
         const memberMarks = marks[member._id] || {};
         submission[member.regNo] = {
           component1: memberMarks.component1 || 0,
           component2: memberMarks.component2 || 0,
           component3: memberMarks.component3 || 0,
-          comments: comments[member._id] || '',
-          attendance: { value: attendance[member._id] }
+          comments: comments[member._id] || ''
         };
+        // Add attendance if enabled
+        if (showAttendance) {
+          submission[member.regNo].attendance = { value: attendance[member._id] || false };
+        }
+      } else if (reviewType === 'review2') {
+        const memberMarks = marks[member._id] || {};
+        submission[member.regNo] = {
+          component1: memberMarks.component1 || 0,
+          comments: comments[member._id] || ''
+        };
+        // Add attendance if enabled
+        if (showAttendance) {
+          submission[member.regNo].attendance = { value: attendance[member._id] || false };
+        }
+      } else if (reviewType === 'review3') {
+        const memberMarks = marks[member._id] || {};
+        submission[member.regNo] = {
+          component1: memberMarks.component1 || 0,
+          comments: comments[member._id] || ''
+        };
+        // Add attendance if enabled
+        if (showAttendance) {
+          submission[member.regNo].attendance = { value: attendance[member._id] || false };
+        }
+      } else if (reviewType === 'review4') {
+        const memberMarks = marks[member._id] || {};
+        submission[member.regNo] = {
+          component1: memberMarks.component1 || 0,
+          component2: memberMarks.component2 || 0,
+          component3: memberMarks.component3 || 0,
+          comments: comments[member._id] || ''
+        };
+        // Add attendance if enabled
+        if (showAttendance) {
+          submission[member.regNo].attendance = { value: attendance[member._id] || false };
+        }
       }
     });
     
     console.log('Submission data:', submission);
     
-    if (['review1', 'review2', 'review3'].includes(reviewType)) {
+    // UPDATED: Only submit PPT object if hasPPTApproval is true
+    if (showPPTApproval) {
       const teamPptObj = {
         pptApproved: {
           approved: teamPptApproved,
@@ -293,7 +368,8 @@ const PopupReview = ({
         )}
 
         <div className="p-4 max-h-[70vh] overflow-y-auto">
-          {showAttendanceAndPPT && (
+          {/* UPDATED: Only show PPT approval if hasPPTApproval is true */}
+          {showPPTApproval && (
             <div className="mb-6 p-4 bg-blue-50 rounded-lg border">
               <h3 className="text-lg font-semibold mb-3">Team PPT Approval</h3>
               <div className="flex items-center gap-4">
@@ -337,7 +413,8 @@ const PopupReview = ({
           )}
 
           {teamMembers.map((member) => {
-            const isAbsent = ['review1', 'review2', 'review3'].includes(reviewType) && attendance[member._id] === false;
+            // UPDATED: Only check attendance if hasAttendance is true
+            const isAbsent = showAttendance && attendance[member._id] === false;
             
             return (
               <div
@@ -393,16 +470,16 @@ const PopupReview = ({
                   </div>
                 </div>
 
-                <div className={`grid gap-4 ${showAttendanceAndPPT ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+                <div className={`grid gap-4 ${showAttendance ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
                   <div>
                     <label className="block text-gray-700 text-sm font-medium mb-2">
-                      {['review2', 'review3'].includes(reviewType) ? 'Panel Comments' : 'Guide Comments'}
+                      {['review2', 'review3', 'review4'].includes(reviewType) ? 'Panel Comments' : 'Guide Comments'}
                     </label>
                     <textarea
                       className={`w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                         isAbsent ? 'bg-gray-100 cursor-not-allowed' : ''
                       }`}
-                      placeholder={['review2', 'review3'].includes(reviewType) ? 'Enter Panel Comments' : 'Enter Guide Comments'}
+                      placeholder={['review2', 'review3', 'review4'].includes(reviewType) ? 'Enter Panel Comments' : 'Enter Guide Comments'}
                       rows="2"
                       value={comments[member._id] || ''}
                       onChange={(e) => {
@@ -414,7 +491,8 @@ const PopupReview = ({
                     />
                   </div>
 
-                  {showAttendanceAndPPT && (
+                  {/* UPDATED: Only show attendance if hasAttendance is true */}
+                  {showAttendance && (
                     <div>
                       <label className="block text-gray-700 text-sm font-medium mb-2">
                         Attendance
