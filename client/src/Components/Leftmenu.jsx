@@ -58,7 +58,7 @@ function Leftmenu() {
                 }`}
               >
                 <div className="flex justify-center items-center gap-2" >
-                  <BellRing />Request
+                  Request
                 </div>
               </button>
               <button 
@@ -77,7 +77,7 @@ function Leftmenu() {
                   isactive === 'admin/panel-management' ? "bg-[#22C55E] text-white" : " bg-gray-100 text-black"
                 }`}
               >
-                P  Panel Management
+                Panel Management
               </button>
               <button 
                 onClick={() => active('admin/facultylistview-adminGuide')}
@@ -85,7 +85,7 @@ function Leftmenu() {
                   isactive === 'admin/facultylistview-adminGuide' ? "bg-[#22C55E] text-white" : " bg-gray-100 text-black"
                 }`}
               >
-                F  Faculty List
+                Faculty List
               </button>
               <button 
                 onClick={() => active('admin/Schedule')}
@@ -94,7 +94,7 @@ function Leftmenu() {
                 }`}
               >
                 <div className="flex justify-center items-center gap-2" >
-                  <Clock />Schedule
+                  Schedule
                 </div>
               </button>
             </div>

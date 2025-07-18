@@ -47,7 +47,7 @@ function Leftmenu() {
                   isactive === 'Panel' ? "bg-[#22C55E] text-white" : " bg-gray-100 text-black"
                 }`}
               >
-                P  Panel Review
+                Panel Review
               </button>
               <button 
                 onClick={() => active('Guide')}
@@ -55,7 +55,7 @@ function Leftmenu() {
                   isactive === 'Guide' ? "bg-[#22C55E] text-white" : " bg-gray-100 text-black"
                 }`}
               >
-                G  Guide
+                Guide
               </button>
             </div>
           </>
