@@ -201,7 +201,7 @@ const Panel = () => {
           studentId: student._id,
         };
 
-        // FIXED: Updated to match new schema with attendance inside each review + COMMENTS
+        // FIXED: Updated to include attendance for review2, review3, and review4
         if (reviewType === 'review2') {
           updateData.review2 = {
             component1: studentReviewData.component1 || null,
@@ -211,12 +211,10 @@ const Panel = () => {
               value: studentReviewData.attendance?.value || false,
               locked: studentReviewData.attendance?.locked || false
             },
-            comments: studentReviewData.comments || '', // ADDED: Comments
+            comments: studentReviewData.comments || '',
             locked: studentReviewData.locked || false
           };
-          if (pptObj && pptObj.pptApproved) {
-            updateData.pptApproved = pptObj.pptApproved;
-          }
+          // NO PPT APPROVAL for review2
         } else if (reviewType === 'review3') {
           updateData.review3 = {
             component1: studentReviewData.component1 || null,
@@ -226,12 +224,10 @@ const Panel = () => {
               value: studentReviewData.attendance?.value || false,
               locked: studentReviewData.attendance?.locked || false
             },
-            comments: studentReviewData.comments || '', // ADDED: Comments
+            comments: studentReviewData.comments || '',
             locked: studentReviewData.locked || false
           };
-          if (pptObj && pptObj.pptApproved) {
-            updateData.pptApproved = pptObj.pptApproved;
-          }
+          // NO PPT APPROVAL for review3
         } else if (reviewType === 'review4') {
           updateData.review4 = {
             component1: studentReviewData.component1 || null,
@@ -241,9 +237,10 @@ const Panel = () => {
               value: studentReviewData.attendance?.value || false,
               locked: studentReviewData.attendance?.locked || false
             },
-            comments: studentReviewData.comments || '', // ADDED: Comments
+            comments: studentReviewData.comments || '',
             locked: studentReviewData.locked || false
           };
+          // PPT APPROVAL ONLY for review4
           if (pptObj && pptObj.pptApproved) {
             updateData.pptApproved = pptObj.pptApproved;
           }
@@ -257,7 +254,8 @@ const Panel = () => {
         studentUpdates
       };
 
-      if (['review2', 'review3', 'review4'].includes(reviewType) && pptObj) {
+      // PPT approval only for review4
+      if (reviewType === 'review4' && pptObj) {
         updatePayload.pptApproved = pptObj.pptApproved;
       }
 
@@ -392,25 +390,19 @@ const Panel = () => {
             )}
           </div>
 
-          {/* Panel Review 1 (review2) */}
+          {/* Panel Review 1 (review2) - WITH ATTENDANCE, NO PPT */}
           {activePopup?.type === 'review2' && (
             <PopupReview
               title="Panel Review 1"
               teamMembers={teams.find(t => t.id === activePopup.teamId).students}
               reviewType="review2"
-              pptApproved={{
-                approved: (() => {
-                  const team = teams.find(t => t.id === activePopup.teamId);
-                  return team.students.length > 0 && 
-                    team.students.every(student => student.pptApproved?.approved === true);
-                })(),
-                locked: false
-              }}
+              hasAttendance={true} // ATTENDANCE ENABLED
+              hasPPTApproval={false} // PPT DISABLED
               isOpen={true}
               locked={isTeamDeadlinePassed('review2', activePopup.teamId)}
               onClose={() => setActivePopup(null)}
               onSubmit={(data, pptObj) => {
-                handleReviewSubmit(activePopup.teamId, 'review2', data, pptObj);
+                handleReviewSubmit(activePopup.teamId, 'review2', data, null); // No PPT for review2
                 setActivePopup(null);
               }}
               onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review2')}
@@ -424,25 +416,19 @@ const Panel = () => {
             />
           )}
 
-          {/* Panel Review 2 (review3) */}
+          {/* Panel Review 2 (review3) - WITH ATTENDANCE, NO PPT */}
           {activePopup?.type === 'review3' && (
             <PopupReview
               title="Panel Review 2"
               teamMembers={teams.find(t => t.id === activePopup.teamId).students}
               reviewType="review3"
-              pptApproved={{
-                approved: (() => {
-                  const team = teams.find(t => t.id === activePopup.teamId);
-                  return team.students.length > 0 && 
-                    team.students.every(student => student.pptApproved?.approved === true);
-                })(),
-                locked: false
-              }}
+              hasAttendance={true} // ATTENDANCE ENABLED
+              hasPPTApproval={false} // PPT DISABLED
               isOpen={true}
               locked={isTeamDeadlinePassed('review3', activePopup.teamId)}
               onClose={() => setActivePopup(null)}
               onSubmit={(data, pptObj) => {
-                handleReviewSubmit(activePopup.teamId, 'review3', data, pptObj);
+                handleReviewSubmit(activePopup.teamId, 'review3', data, null); // No PPT for review3
                 setActivePopup(null);
               }}
               onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review3')}
@@ -456,12 +442,14 @@ const Panel = () => {
             />
           )}
 
-          {/* Final Review (review4) */}
+          {/* Final Review (review4) - WITH ATTENDANCE AND PPT */}
           {activePopup?.type === 'review4' && (
             <PopupReview
               title="Final Review"
               teamMembers={teams.find(t => t.id === activePopup.teamId).students}
               reviewType="review4"
+              hasAttendance={true} // ATTENDANCE ENABLED
+              hasPPTApproval={true} // PPT ENABLED
               pptApproved={{
                 approved: (() => {
                   const team = teams.find(t => t.id === activePopup.teamId);
@@ -474,7 +462,7 @@ const Panel = () => {
               locked={isTeamDeadlinePassed('review4', activePopup.teamId)}
               onClose={() => setActivePopup(null)}
               onSubmit={(data, pptObj) => {
-                handleReviewSubmit(activePopup.teamId, 'review4', data, pptObj);
+                handleReviewSubmit(activePopup.teamId, 'review4', data, pptObj); // PPT for review4
                 setActivePopup(null);
               }}
               onRequestEdit={() => handleRequestEdit(activePopup.teamId, 'review4')}
