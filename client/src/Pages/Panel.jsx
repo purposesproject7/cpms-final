@@ -205,8 +205,6 @@ const Panel = () => {
         if (reviewType === 'review2') {
           updateData.review2 = {
             component1: studentReviewData.component1 || null,
-            component2: studentReviewData.component2 || null,
-            component3: studentReviewData.component3 || null,
             attendance: {
               value: studentReviewData.attendance?.value || false,
               locked: studentReviewData.attendance?.locked || false
@@ -214,12 +212,10 @@ const Panel = () => {
             comments: studentReviewData.comments || '',
             locked: studentReviewData.locked || false
           };
-          // NO PPT APPROVAL for review2
+          
         } else if (reviewType === 'review3') {
           updateData.review3 = {
             component1: studentReviewData.component1 || null,
-            component2: studentReviewData.component2 || null,
-            component3: studentReviewData.component3 || null,
             attendance: {
               value: studentReviewData.attendance?.value || false,
               locked: studentReviewData.attendance?.locked || false
@@ -227,7 +223,7 @@ const Panel = () => {
             comments: studentReviewData.comments || '',
             locked: studentReviewData.locked || false
           };
-          // NO PPT APPROVAL for review3
+          
         } else if (reviewType === 'review4') {
           updateData.review4 = {
             component1: studentReviewData.component1 || null,
