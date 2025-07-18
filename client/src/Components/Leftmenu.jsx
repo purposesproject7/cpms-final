@@ -68,7 +68,7 @@ function Leftmenu() {
                 }`}
               >
                 <div className="flex justify-center items-center gap-2" >
-                  <UserRoundPlus />Add Faculty Member
+                  Add Faculty Member
                 </div>
               </button>
               <button 
