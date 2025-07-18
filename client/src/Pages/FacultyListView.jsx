@@ -255,12 +255,12 @@ const FacultyListView = () => {
                 )}
               </div>
 
-              // {/* Debug info for troubleshooting */}
+              {/* // Debug info for troubleshooting
               // <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
               //   <strong>Debug Info:</strong>
               //   <div>Current User: {JSON.stringify(getCurrentUser())}</div>
               //   <div>LocalStorage Keys: {Object.keys(localStorage).join(', ')}</div>
-              // </div>
+              // </div> */}
 
               {filteredList.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
