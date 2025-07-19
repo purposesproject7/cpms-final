@@ -87,13 +87,20 @@ const CreateProject = ({ isOpen, onClose, onSuccess }) => {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-700">Students</h3>
-              <button
-                type="button"
-                onClick={addStudent}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                Add Student
-              </button>
+
+          <button
+            type="button"
+            onClick={addStudent}
+            disabled={students.length >= 3}
+            className={`px-4 py-2 text-white rounded ${
+              students.length >= 3 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-blue-500 hover:bg-blue-600'
+            }`}
+          >
+            Add Student {students.length >= 3 && '(Max 3)'}
+          </button>
+
             </div>
 
             {students.map((student, index) => (
