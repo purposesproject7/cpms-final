@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PopupReview from '../Components/PopupReview';
 import ReviewTable from '../Components/ReviewTable';
-
 import Navbar from '../Components/UniversalNavbar';
 import CreateProject from '../Components/CreateProject';
 import { ChevronRight } from 'lucide-react';
@@ -14,6 +13,7 @@ import {
   checkAllRequestStatuses,
   createProject
 } from '../api';
+
 const Guide = () => {
   const [teams, setTeams] = useState([]);
   const [deadlines, setDeadlines] = useState({});
@@ -21,6 +21,7 @@ const Guide = () => {
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [requestStatuses, setRequestStatuses] = useState({});
+  const [showCreateProject, setShowCreateProject] = useState(false); // Add this state
 
   useEffect(() => {
     fetchData();
@@ -84,20 +85,24 @@ const Guide = () => {
     }
   };
 
-  // FIXED: Team-level deadline checking using nested deadline structure
+  // Handle successful project creation
+  const handleProjectCreated = () => {
+    setShowCreateProject(false);
+    fetchData(); // Refresh the projects list
+  };
+
+  // All your existing functions remain the same...
   const isTeamDeadlinePassed = (reviewType, teamId) => {
     console.log(`=== TEAM DEADLINE CHECK FOR ${reviewType} ===`);
     
     const team = teams.find(t => t.id === teamId);
     if (!team) return false;
     
-    // Check if ANY student in the team has an individual deadline override
     const hasIndividualOverride = team.students.some(student => 
       student.deadline && student.deadline[reviewType]
     );
     
     if (hasIndividualOverride) {
-      // If any student has individual override, use the LATEST deadline from all students
       const studentDeadlines = team.students
         .filter(student => student.deadline && student.deadline[reviewType])
         .map(student => new Date(student.deadline[reviewType].to));
@@ -115,7 +120,6 @@ const Guide = () => {
       }
     }
     
-    // Fall back to system default deadlines
     if (!deadlines || !deadlines[reviewType]) {
       console.log(`No deadline found for ${reviewType}`);
       return false;
@@ -142,14 +146,12 @@ const Guide = () => {
   };
 
   const isReviewLocked = (student, reviewType, teamId) => {
-    // Check manual lock first
     const studentReview = student[reviewType];
     if (studentReview?.locked) {
       console.log(`Student ${student.name} ${reviewType} is manually locked`);
       return true;
     }
     
-    // Check team-level deadline
     const teamDeadlinePassed = isTeamDeadlinePassed(reviewType, teamId);
     console.log(`Team ${reviewType} deadline passed:`, teamDeadlinePassed);
     return teamDeadlinePassed;
@@ -165,13 +167,11 @@ const Guide = () => {
       return status;
     });
     
-    // Check for pending FIRST
     if (statuses.includes('pending')) {
       console.log(`Team ${reviewType} status: pending`);
       return 'pending';
     }
     
-    // Check if team deadline passed
     if (isTeamDeadlinePassed(reviewType, team.id)) {
       console.log(`Team deadline passed for ${reviewType} - status: none`);
       return 'none';
@@ -305,9 +305,15 @@ const Guide = () => {
       <Navbar userType="faculty" />
       <div className='min-h-screen bg-gray-50 overflow-x-hidden'>
         <div className='p-24 items-center'>
-          <div className='flex  justify-end'>
-              <CreateProject/>
+          <div className='flex justify-end mb-4'>
+            <button
+              onClick={() => setShowCreateProject(true)}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              Create Project
+            </button>
           </div>
+          
           <div className="bg-white shadow-md rounded-md">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold text-black pl-5 mt-2">Guide</h2>
@@ -373,6 +379,29 @@ const Guide = () => {
               ))
             )}
           </div>
+
+   
+          {showCreateProject && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center p-6 border-b">
+                  <h3 className="text-lg font-semibold">Create New Project</h3>
+                  <button
+                    onClick={() => setShowCreateProject(false)}
+                    className="text-gray-400 hover:text-gray-600 text-2xl"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="p-6">
+                  <CreateProject 
+                    onClose={() => setShowCreateProject(false)}
+                    onSuccess={handleProjectCreated}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {activePopup?.type === 'review0' && (
             <PopupReview
