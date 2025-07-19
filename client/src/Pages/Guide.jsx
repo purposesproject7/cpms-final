@@ -3,6 +3,7 @@ import PopupReview from '../Components/PopupReview';
 import ReviewTable from '../Components/ReviewTable';
 import CreateProject from '../Components/CreateProject';
 import Navbar from '../Components/UniversalNavbar';
+import CreateProject from '../Components/CreateProject';
 import { ChevronRight } from 'lucide-react';
 import { 
   getGuideProjects, 
@@ -304,6 +305,9 @@ const Guide = () => {
       <Navbar userType="faculty" />
       <div className='min-h-screen bg-gray-50 overflow-x-hidden'>
         <div className='p-24 items-center'>
+          <div className='flex  justify-end'>
+              <CreateProject/>
+          </div>
           <div className="bg-white shadow-md rounded-md">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold text-black pl-5 mt-2">Guide</h2>
