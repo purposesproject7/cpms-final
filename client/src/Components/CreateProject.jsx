@@ -1,4 +1,4 @@
-// CreateProject.jsx - New component for Guide
+
 import React, { useState } from 'react';
 import { createProject } from '../api';
 
@@ -8,7 +8,12 @@ const CreateProject = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
 
   const addStudent = () => {
+  if(students.length <3){
     setStudents([...students, { regNo: '', name: '', emailId: '' }]);
+  }
+  else{
+    alert("Only 3 Students Per project")
+  }
   };
 
   const removeStudent = (index) => {
@@ -40,7 +45,7 @@ const CreateProject = ({ isOpen, onClose, onSuccess }) => {
         alert('Project created successfully!');
         onSuccess();
         onClose();
-        // Reset form
+       
         setProjectName('');
         setStudents([{ regNo: '', name: '', emailId: '' }]);
       }
