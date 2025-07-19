@@ -21,7 +21,7 @@ const Guide = () => {
   const [expandedTeam, setExpandedTeam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [requestStatuses, setRequestStatuses] = useState({});
-  const [showCreateProject, setShowCreateProject] = useState(false); // Add this state
+  const [showCreateProject, setShowCreateProject] = useState(false); 
 
   useEffect(() => {
     fetchData();
@@ -41,7 +41,7 @@ const Guide = () => {
         const projects = projectsRes.data.data;
         console.log('Raw guide projects from backend:', projects);
         
-        // DEBUG: Check deadline structure
+        
         projects.forEach(project => {
           console.log(`Project ${project.name} students:`, project.students);
           
@@ -85,13 +85,13 @@ const Guide = () => {
     }
   };
 
-  // Handle successful project creation
+
   const handleProjectCreated = () => {
     setShowCreateProject(false);
-    fetchData(); // Refresh the projects list
+    fetchData(); 
   };
 
-  // All your existing functions remain the same...
+
   const isTeamDeadlinePassed = (reviewType, teamId) => {
     console.log(`=== TEAM DEADLINE CHECK FOR ${reviewType} ===`);
     
