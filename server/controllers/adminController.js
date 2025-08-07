@@ -820,126 +820,186 @@ export async function assignExistingPanelToProject(req, res) {
 }
 
 export async function autoAssignPanelsToProjects(req, res) {
-  const unassignedProjects = await Project.find({ panel: null }).populate(
-    "guideFaculty"
-  );
-  const panels = await Panel.find().populate(["faculty1", "faculty2"]);
+  try {
+    const unassignedProjects = await Project.find({ panel: null }).populate(
+      "guideFaculty"
+    );
+    const panels = await Panel.find().populate(["faculty1", "faculty2"]);
 
-  if (!panels.length) {
-    return res
-      .status(400)
-      .json({ success: false, message: "No panels available." });
-  }
-
-  // Initialize a map to hold assignments
-  const panelAssignments = {};
-  panels.forEach((panel) => {
-    panelAssignments[panel._id.toString()] = [];
-  });
-
-  // Distribute projects equally (round-robin)
-  let panelIndex = 0;
-  for (const project of unassignedProjects) {
-    // Optionally: skip panels where guide is a member
-    const guideId = project.guideFaculty?._id?.toString();
-    let eligiblePanels = panels;
-    if (guideId) {
-      eligiblePanels = panels.filter(
-        (panel) =>
-          panel.faculty1._id.toString() !== guideId &&
-          panel.faculty2._id.toString() !== guideId
-      );
-      // If none eligible, allow all panels
-      if (!eligiblePanels.length) eligiblePanels = panels;
+    if (!panels.length) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No panels available." });
     }
 
-    // Assign to next eligible panel in round-robin
-    const eligiblePanel = eligiblePanels[panelIndex % eligiblePanels.length];
-    project.panel = eligiblePanel._id;
-    await project.save();
-    panelAssignments[eligiblePanel._id.toString()].push(project._id);
+    // Initialize a map to hold assignments
+    const panelAssignments = {};
+    panels.forEach((panel) => {
+      panelAssignments[panel._id.toString()] = [];
+    });
 
-    panelIndex++;
+    let panelIndex = 0;
+
+    for (const project of unassignedProjects) {
+      const guideId = project.guideFaculty?._id?.toString();
+      const guideSchool = project.guideFaculty?.school;
+      const guideDepartment = project.guideFaculty?.department;
+
+      // Filter panels to only those with matching school and department
+      let eligiblePanels = panels.filter((panel) => {
+        const { faculty1, faculty2 } = panel;
+        // Both faculties must exist
+        if (!faculty1 || !faculty2) return false;
+
+        // Check school and department match (both faculties assumed to belong to same dept & school in your model)
+        if (
+          faculty1.school !== guideSchool ||
+          faculty2.school !== guideSchool ||
+          faculty1.department !== guideDepartment ||
+          faculty2.department !== guideDepartment
+        ) {
+          return false; // Different school or department
+        }
+
+        // Skip if guide is on the panel
+        if (guideId) {
+          if (
+            faculty1._id.toString() === guideId ||
+            faculty2._id.toString() === guideId
+          ) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      // If no eligible panel found (due to mismatches), allow all as fallback
+      if (!eligiblePanels.length) {
+        eligiblePanels = panels;
+      }
+
+      // Assign to next eligible panel in round-robin
+      const eligiblePanel = eligiblePanels[panelIndex % eligiblePanels.length];
+      project.panel = eligiblePanel._id;
+      await project.save();
+      panelAssignments[eligiblePanel._id.toString()].push(project._id);
+
+      panelIndex++;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Panels assigned equally to unassigned projects.",
+      assignments: panelAssignments,
+    });
+  } catch (error) {
+    console.error("Error in autoAssignPanelsToProjects:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-
-  return res.status(200).json({
-    success: true,
-    message: "Panels assigned equally to unassigned projects.",
-    assignments: panelAssignments,
-  });
 }
 
 export async function assignPanelToProject(req, res) {
-  const { panelFacultyIds, projectId } = req.body;
+  try {
+    const { panelFacultyIds, projectId } = req.body;
 
-  if (!Array.isArray(panelFacultyIds) || panelFacultyIds.length !== 2) {
-    return res.status(400).json({
-      success: false,
-      message: "Exactly 2 panel faculty IDs required.",
+    if (!Array.isArray(panelFacultyIds) || panelFacultyIds.length !== 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Exactly 2 panel faculty IDs required.",
+      });
+    }
+
+    // Check distinctness
+    if (panelFacultyIds[0] === panelFacultyIds[1]) {
+      return res.status(400).json({
+        success: false,
+        message: "Panel faculty members must be distinct.",
+      });
+    }
+
+    const [faculty1, faculty2] = await Promise.all([
+      Faculty.findById(panelFacultyIds[0]),
+      Faculty.findById(panelFacultyIds[1]),
+    ]);
+
+    if (!faculty1 || !faculty2) {
+      return res.status(404).json({
+        success: false,
+        message: "One or both faculty not found.",
+      });
+    }
+
+    const project = await Project.findById(projectId).populate("guideFaculty");
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found.",
+      });
+    }
+
+    if (!project.guideFaculty) {
+      return res.status(400).json({
+        success: false,
+        message: "Project has no guide faculty to check.",
+      });
+    }
+
+    // Check that panel faculty and guide faculty have same school and dept
+    if (
+      faculty1.school !== project.guideFaculty.school ||
+      faculty2.school !== project.guideFaculty.school ||
+      faculty1.department !== project.guideFaculty.department ||
+      faculty2.department !== project.guideFaculty.department
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Panel faculty and guide faculty must belong to the same school and department.",
+      });
+    }
+
+    // Prevent guide faculty from being panel member
+    if (
+      project.guideFaculty._id.toString() === panelFacultyIds[0] ||
+      project.guideFaculty._id.toString() === panelFacultyIds[1]
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Guide faculty cannot be a panel member for their own project.",
+      });
+    }
+
+    // Create panel
+    const panel = new Panel({
+      faculty1: panelFacultyIds[0],
+      faculty2: panelFacultyIds[1],
+      school: faculty1.school,
+      department: faculty1.department,
     });
-  }
+    await panel.save();
 
-  // Check that both faculty exist and are not the same
-  if (panelFacultyIds[0] === panelFacultyIds[1]) {
-    return res.status(400).json({
-      success: false,
-      message: "Panel faculty members must be distinct.",
+    // Assign panel to project
+    project.panel = panel._id;
+    await project.save();
+
+    const populatedProject = await Project.findById(projectId).populate({
+      path: "panel",
+      populate: [{ path: "faculty1" }, { path: "faculty2" }],
     });
-  }
 
-  const [faculty1, faculty2] = await Promise.all([
-    Faculty.findById(panelFacultyIds[0]),
-    Faculty.findById(panelFacultyIds[1]),
-  ]);
-
-  if (!faculty1 || !faculty2) {
-    return res.status(404).json({
-      success: false,
-      message: "One or both faculty not found.",
+    return res.status(200).json({
+      success: true,
+      message: "Panel assigned successfully",
+      data: populatedProject,
     });
+  } catch (error) {
+    console.error("Error in assignPanelToProject:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
-
-  const project = await Project.findById(projectId);
-  if (!project) {
-    return res.status(404).json({
-      success: false,
-      message: "Project not found.",
-    });
-  }
-
-  // Prevent guide faculty from being on the panel
-  if (
-    project.guideFaculty.toString() === panelFacultyIds[0] ||
-    project.guideFaculty.toString() === panelFacultyIds[1]
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Guide faculty cannot be a panel member for their own project.",
-    });
-  }
-
-  // Create a new panel
-  const panel = new Panel({
-    faculty1: panelFacultyIds[0],
-    faculty2: panelFacultyIds[1],
-  });
-  await panel.save();
-
-  // Assign panel to project
-  project.panel = panel._id;
-  await project.save();
-
-  const populatedProject = await Project.findById(projectId).populate({
-    path: "panel",
-    populate: [{ path: "faculty1" }, { path: "faculty2" }],
-  });
-
-  return res.status(200).json({
-    success: true,
-    message: "Panel assigned successfully",
-    data: populatedProject,
-  });
 }
+
 
 export async function autoCreatePanels(req, res) {
   try {
