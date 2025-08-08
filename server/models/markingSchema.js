@@ -8,10 +8,19 @@ const componentSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const deadlineSchema = new mongoose.Schema(
+  {
+    from: { type: Date, required: true },
+    to: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
 const reviewSchema = new mongoose.Schema(
   {
     reviewName: { type: String, required: true },
     components: [componentSchema],
+    deadline: { type: deadlineSchema, required: true }, 
   },
   { _id: false }
 );

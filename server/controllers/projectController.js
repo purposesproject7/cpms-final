@@ -28,7 +28,6 @@ export async function createProject(req, res, next) {
   try {
     const { name, students: studentDetails, guideFacultyEmpId } = req.body;
 
-    // Validate studentDetails is non-empty
     if (!Array.isArray(studentDetails) || studentDetails.length === 0) {
       return res.status(400).json({
         message:
@@ -36,7 +35,6 @@ export async function createProject(req, res, next) {
       });
     }
 
-    // Assuming all students belong to the same school and department, get from the first student or pass explicitly
     const { school, department } = studentDetails[0];
     if (!school || !department) {
       return res.status(400).json({
@@ -44,7 +42,6 @@ export async function createProject(req, res, next) {
       });
     }
 
-    // Fetch MarkingSchema for the school and department
     const markingSchema = await MarkingSchema.findOne({ school, department });
     if (!markingSchema) {
       return res.status(500).json({
@@ -53,14 +50,24 @@ export async function createProject(req, res, next) {
       });
     }
 
-    // Extract the review keys from markingSchema.reviews
+    // Extract review keys and their default deadlines from markingSchema
     const reviewKeys = markingSchema.reviews.map((review) => review.reviewName);
 
-    // Build default deadlines map from markingSchema (if you store deadlines here)
-    // Since your markingSchema does not have deadlines in the posted schema,
-    // you may need to either add deadlines to MarkingSchema or handle it differently.
-    // Here, we'll assume deadlines will be set later or separately.
-    const defaultDeadlines = {}; // Empty or handle as per your design
+    // Build default deadline map from markingSchema reviews
+    // Map keys as reviewName, values as { from, to } or null if missing
+    const defaultDeadlinesMap = new Map();
+
+    markingSchema.reviews.forEach((review) => {
+      if (review.deadline && review.deadline.from && review.deadline.to) {
+        defaultDeadlinesMap.set(review.reviewName, {
+          from: review.deadline.from,
+          to: review.deadline.to,
+        });
+      } else {
+        // If deadline missing, you can decide if to set null or skip
+        defaultDeadlinesMap.set(review.reviewName, null);
+      }
+    });
 
     const studentIds = await Promise.all(
       studentDetails.map(async (studentObj) => {
@@ -75,7 +82,6 @@ export async function createProject(req, res, next) {
           department: studDept,
         } = studentObj;
 
-        // Validate school and department per student matches overall
         if (studSchool !== school || studDept !== department) {
           throw new Error(
             `Student ${regNo} has mismatched school or department. All students should belong to same school and department.`
@@ -84,22 +90,18 @@ export async function createProject(req, res, next) {
 
         const existingStudent = await Student.findOne({ regNo });
         if (existingStudent) {
-          // Note: Returning inside Promise.all won't stop execution. Instead, throw error or handle differently.
           throw new Error(`Student already exists with regNo ${regNo}`);
         }
 
         const reviewsMap = new Map();
 
-        // Use reviewKeys from MarkingSchema to build review structure
         for (const reviewKey of reviewKeys) {
-          // Find the review definition from markingSchema (to get components if needed)
           const reviewDef = markingSchema.reviews.find(
             (rev) => rev.reviewName === reviewKey
           );
 
           const inputReview = reviews?.[reviewKey] || {};
 
-          // Initialize marks based on components or empty
           let marks = {};
 
           if (reviewDef && Array.isArray(reviewDef.components)) {
@@ -107,7 +109,6 @@ export async function createProject(req, res, next) {
               marks[comp.name] = inputReview.marks?.[comp.name] || 0;
             }
           } else {
-            // fallback: copy marks if any
             marks = inputReview.marks || {};
           }
 
@@ -126,8 +127,28 @@ export async function createProject(req, res, next) {
           });
         }
 
-        // Use provided deadline or default empty (modify if deadlines exist in markingSchema)
-        const studentDeadline = deadline || defaultDeadlines;
+        // Assign deadlines for the student:
+        // If the student object includes a deadline map (overrides), use it,
+        // else create a new Map from defaults in markingSchema.
+        let studentDeadlineMap;
+
+        if (
+          deadline &&
+          typeof deadline === "object" &&
+          Object.keys(deadline).length > 0
+        ) {
+          // Use provided deadline object overriding defaults
+          // Convert plain object to Map for studentSchema deadline field
+          studentDeadlineMap = new Map();
+
+          for (const [key, value] of Object.entries(deadline)) {
+            // Expect value: { from, to }
+            studentDeadlineMap.set(key, value);
+          }
+        } else {
+          // Use default deadlines from markingSchema
+          studentDeadlineMap = new Map(defaultDeadlinesMap);
+        }
 
         const student = new Student({
           regNo,
@@ -135,7 +156,7 @@ export async function createProject(req, res, next) {
           emailId,
           reviews: reviewsMap,
           pptApproved: pptApproved || { approved: false, locked: false },
-          deadline: studentDeadline,
+          deadline: studentDeadlineMap,
           school,
           department,
         });
@@ -171,7 +192,6 @@ export async function createProject(req, res, next) {
     });
   } catch (error) {
     console.error("Error creating project:", error);
-    // If error is thrown inside Promise.all, it will be caught here
     return res.status(500).json({
       message: "Error creating project",
       error: error.message,

@@ -345,35 +345,119 @@ export async function createAdmin(req, res) {
   });
 }
 
-// these are not necessary as we set the deadlines with the markingschema
-// export async function getDefaultDeadline(req, res) {
-//   const config = await SystemConfig.findOne();
-//   if (!config) {
-//     return res.status(404).json({
-//       success: false,
-//       message: "No default deadlines set yet.",
-//     });
-//   }
-//   res.status(200).json({ success: true, data: config });
-// }
+export async function getDefaultDeadline(req, res) {
+  try {
+    const { school, department } = req.query;
 
-// export async function setDefaultDeadline(req, res) {
-//   const { defaultDeadline } = req.body;
+    if (!school || !department) {
+      return res.status(400).json({
+        success: false,
+        message: "school and department query parameters are required.",
+      });
+    }
 
-//   let config = await SystemConfig.findOne();
-//   if (!config) {
-//     config = new SystemConfig(defaultDeadline);
-//   } else {
-//     Object.assign(config, defaultDeadline);
-//   }
+    const markingSchema = await MarkingSchema.findOne({ school, department });
 
-//   await config.save();
+    if (!markingSchema) {
+      return res.status(404).json({
+        success: false,
+        message: "No marking schema found for this school and department.",
+      });
+    }
 
-//   return res.status(200).json({
-//     success: true,
-//     message: "Default Deadlines set successfully",
-//   });
-// }
+    // Format deadlines by extracting reviewName and deadline for each review
+    const deadlines = markingSchema.reviews.map((review) => ({
+      reviewName: review.reviewName,
+      deadline: review.deadline || null,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        school: markingSchema.school,
+        department: markingSchema.department,
+        deadlines,
+      },
+    });
+  } catch (error) {
+    console.error("Error in getDefaultDeadline:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+}
+
+export async function setDefaultDeadline(req, res) {
+  try {
+    const { school, department, deadlines } = req.body;
+
+    if (!school || !department) {
+      return res.status(400).json({
+        success: false,
+        message: "school and department are required.",
+      });
+    }
+
+    if (
+      !Array.isArray(deadlines) ||
+      deadlines.some(
+        (d) =>
+          !d.reviewName || !d.deadline || !d.deadline.from || !d.deadline.to
+      )
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "deadlines must be an array of objects with reviewName and deadline { from, to }.",
+      });
+    }
+
+    // Fetch existing marking schema or create new one
+    let markingSchema = await MarkingSchema.findOne({ school, department });
+
+    if (!markingSchema) {
+      // Create new markingSchema with empty reviews (will get updated now)
+      markingSchema = new MarkingSchema({ school, department, reviews: [] });
+    }
+
+    // Merge/update deadlines for reviews
+    // Loop through the input deadlines, for each review update or add deadline object
+    deadlines.forEach(({ reviewName, deadline }) => {
+      // Find if the review exists
+      const idx = markingSchema.reviews.findIndex(
+        (rev) => rev.reviewName === reviewName
+      );
+      if (idx !== -1) {
+        // Update deadline of existing review
+        markingSchema.reviews[idx].deadline = deadline;
+      } else {
+        // Add new review with empty components but provided deadline
+        markingSchema.reviews.push({
+          reviewName,
+          components: [],
+          deadline,
+        });
+      }
+    });
+
+    await markingSchema.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Default deadlines set successfully.",
+      data: markingSchema,
+    });
+  } catch (error) {
+    console.error("Error in setDefaultDeadline:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+}
 
 // need to restructure this
 
