@@ -4,7 +4,6 @@ import PopupReview from '../Components/PopupReview';
 import EditRequestModal from '../Components/EditRequestModal';
 import ReviewTable from '../Components/ReviewTable';
 import Navbar from '../Components/UniversalNavbar';
-import FacultyBroadcastFeed from '../Components/FacultyBroadcastFeed';
 import { Database, ChevronRight, RefreshCw, BookOpen, Users, AlertCircle, Calendar } from 'lucide-react';
 import { 
   getGuideProjects, 
@@ -987,8 +986,6 @@ const fetchData = useCallback(async () => {
               </button>
             </div>
             
-            <FacultyBroadcastFeed />
-
             {/* Inner content that gets refreshed - Key changes to force re-render */}
             <GuideContent
               key={refreshKey} // This key changes on refresh, forcing re-render
