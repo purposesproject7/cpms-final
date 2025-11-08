@@ -16,6 +16,53 @@ import Panel from "../models/panelSchema.js";
 import MarkingSchema from "../models/markingSchema.js";
 
 import BroadcastMessage from "../models/broadcastMessageSchema.js";
+import { logger, safeMeta } from "../utils/logger.js";
+
+const PANEL_UPDATE_EVENT = "panel:update";
+
+function emitPanelUpdates(req, panelIds, payload = {}) {
+  try {
+    const io = req.app?.get("io");
+    if (!io) {
+      return;
+    }
+
+    const ids = Array.isArray(panelIds) ? panelIds : [panelIds];
+    const uniqueIds = Array.from(
+      new Set(
+        ids
+          .map((id) => {
+            if (!id) {
+              return null;
+            }
+            if (typeof id === "object" && typeof id.toString === "function") {
+              return id.toString();
+            }
+            return String(id);
+          })
+          .filter(Boolean)
+      )
+    );
+
+    if (!uniqueIds.length) {
+      return;
+    }
+
+    uniqueIds.forEach((panelId) => {
+      const eventPayload = {
+        panelId,
+        ...payload,
+        timestamp: new Date().toISOString(),
+      };
+
+      io.to(`panel:${panelId}`).emit(PANEL_UPDATE_EVENT, eventPayload);
+    });
+
+    logger.debug('panel_updates_emitted', safeMeta({ panelIds: uniqueIds, action: payload?.action || null }));
+  } catch (error) {
+    logger.warn('panel_update_emit_failed', safeMeta({ error: error?.message }));
+  }
+}
 
 
 
@@ -1387,6 +1434,10 @@ export async function createPanelManually(req, res) {
     const panel = new Panel(panelData);
     await panel.save();
 
+    emitPanelUpdates(req, [panel._id], {
+      action: "panel-created",
+    });
+
     return res.status(201).json({
       success: true,
       message: "Panel created successfully.",
@@ -1633,8 +1684,15 @@ export async function deletePanel(req, res) {
       });
     }
 
+    const affectedProjects = await Project.find({ panel: panelId }).select("_id");
+
     // Remove panel references from projects
     await Project.updateMany({ panel: panelId }, { $set: { panel: null } });
+
+    emitPanelUpdates(req, [panelId], {
+      action: "panel-deleted",
+      projectIds: affectedProjects.map((project) => project._id.toString()),
+    });
 
     return res.status(200).json({
       success: true,
@@ -1687,13 +1745,32 @@ export async function assignPanelToProject(req, res) {
   try {
     const { panelId, projectId } = req.body;
 
+    const project = await Project.findById(projectId).populate("panel");
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found.",
+      });
+    }
+
+    const previousPanelId = project.panel?._id
+      ? project.panel._id.toString()
+      : null;
+
     // Handle panel removal
     if (!panelId || panelId === "null") {
       const updatedProject = await Project.findByIdAndUpdate(
         projectId,
         { panel: null },
         { new: true }
-      );
+      ).populate("panel");
+
+      if (previousPanelId) {
+        emitPanelUpdates(req, [previousPanelId], {
+          action: "panel-project-unassigned",
+          projectId: project._id.toString(),
+        });
+      }
 
       return res.status(200).json({
         success: true,
@@ -1710,11 +1787,13 @@ export async function assignPanelToProject(req, res) {
       });
     }
 
-    const project = await Project.findById(projectId);
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        message: "Project not found.",
+    const nextPanelId = panel._id.toString();
+
+    if (previousPanelId && previousPanelId === nextPanelId) {
+      return res.status(200).json({
+        success: true,
+        message: "Panel already assigned to project",
+        data: project,
       });
     }
 
@@ -1734,6 +1813,14 @@ export async function assignPanelToProject(req, res) {
       { panel: panel._id },
       { new: true }
     ).populate("panel");
+
+    const recipients = [previousPanelId, nextPanelId].filter(Boolean);
+    if (recipients.length) {
+      emitPanelUpdates(req, recipients, {
+        action: "panel-project-assigned",
+        projectId: updatedProject._id.toString(),
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -1964,6 +2051,23 @@ export async function autoAssignPanelsToProjects(req, res) {
         );
       }
     }
+
+    Object.entries(panelAssignments).forEach(([panelKey, projects]) => {
+      if (!projects.length) {
+        return;
+      }
+
+      const projectIds = projects.map((projectId) =>
+        typeof projectId === "object" && typeof projectId.toString === "function"
+          ? projectId.toString()
+          : String(projectId)
+      );
+
+      emitPanelUpdates(req, [panelKey], {
+        action: "panel-projects-auto-assigned",
+        projectIds,
+      });
+    });
 
     return res.status(200).json({
       success: true,

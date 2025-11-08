@@ -4,6 +4,8 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
 import connectDB from "./utils/db.js";
 
 import projectRouter from "./routes/projectRoutes.js";
@@ -24,6 +26,73 @@ connectDB();
 // import "./utils/deadlineRemainder.js";
 
 const app = express();
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://cpms-latest.vercel.app",
+  "https://cpms-latest-projectpurposes-projects.vercel.app",
+  "https://cpms-latest-git-main-projectpurposes-projects.vercel.app",
+];
+
+const server = http.createServer(app);
+
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+  },
+});
+
+app.set("io", io);
+
+const normalizePanelIds = (panelIds) => {
+  if (!panelIds) {
+    return [];
+  }
+  const list = Array.isArray(panelIds) ? panelIds : [panelIds];
+  return Array.from(
+    new Set(
+      list
+        .map((id) => {
+          if (id === null || id === undefined) {
+            return null;
+          }
+          if (typeof id === "object" && typeof id.toString === "function") {
+            return id.toString();
+          }
+          return String(id);
+        })
+        .filter(Boolean)
+    )
+  );
+};
+
+io.on("connection", (socket) => {
+  logger.info('socket_connected', { socketId: socket.id });
+
+  socket.on("panel:join", (panelIds) => {
+    const rooms = normalizePanelIds(panelIds);
+    rooms.forEach((panelId) => {
+      const room = `panel:${panelId}`;
+      socket.join(room);
+      logger.debug('socket_join_panel', { socketId: socket.id, room });
+    });
+  });
+
+  socket.on("panel:leave", (panelIds) => {
+    const rooms = normalizePanelIds(panelIds);
+    rooms.forEach((panelId) => {
+      const room = `panel:${panelId}`;
+      socket.leave(room);
+      logger.debug('socket_leave_panel', { socketId: socket.id, room });
+    });
+  });
+
+  socket.on("disconnect", (reason) => {
+    logger.info('socket_disconnected', { socketId: socket.id, reason });
+  });
+});
 
 // Use Helmet
 app.use(helmet());
@@ -47,14 +116,6 @@ if (process.env.NODE_ENV !== "production") {
     })
   );
 }
-
-const allowedOrigins = [
-  "http://localhost:3000", // for development// your deployed frontend on Vercel
-  "http://localhost:5173",
-  "https://cpms-latest.vercel.app",
-  "https://cpms-latest-projectpurposes-projects.vercel.app",
-  "https://cpms-latest-git-main-projectpurposes-projects.vercel.app",
-];
 
 app.use(
   cors({
@@ -82,6 +143,6 @@ app.use("/api/student", studentRouter);
 app.use("/api/faculty", facultyRouter); // GET /api/faculty/getFacultyDetails/:id
 app.use("/api/otp", otpRouter);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   logger.info('server_start', { message: `Server running at http://localhost:${PORT}` });
 });

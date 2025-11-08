@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNotification } from '../Components/NotificationProvider';
 import PopupReview from '../Components/PopupReview';
 import EditRequestModal from '../Components/EditRequestModal'; // ✅ ADDED: Import EditRequestModal
@@ -14,6 +14,45 @@ import {
 } from '../api';
 import FacultyBroadcastFeed from '../Components/FacultyBroadcastFeed';
 import ProjectNameEditor from '../Components/ProjectNameEditor';
+import { io } from 'socket.io-client';
+
+const SOCKET_EVENT = 'panel:update';
+
+const getSocketUrl = () => {
+  const explicit = import.meta.env.VITE_SOCKET_URL;
+  if (explicit) {
+    return explicit;
+  }
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    return apiUrl.replace(/\/api\/?$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.host}`;
+  }
+
+  return '';
+};
+
+const normalizePanelId = (panel) => {
+  if (!panel) {
+    return null;
+  }
+
+  const raw = panel._id ?? panel.id ?? panel;
+
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+
+  if (typeof raw === 'object' && typeof raw.toString === 'function') {
+    return raw.toString();
+  }
+
+  return String(raw);
+};
 
 // ✅ FIXED: Normalize student data function moved outside component
 function normalizeStudentData(student) {
@@ -392,6 +431,12 @@ const Panel = () => {
 
   const { showNotification, hideNotification } = useNotification();
 
+  const fetchInProgressRef = useRef(false);
+  const pendingFetchRef = useRef(false);
+  const socketRef = useRef(null);
+  const joinedPanelsRef = useRef([]);
+  const lastSocketNotificationRef = useRef(0);
+
   // ✅ FIXED: Static functions that don't cause re-renders
   const getReviewTypesForTeam = useCallback((markingSchema) => {
     if (!markingSchema?.reviews || !Array.isArray(markingSchema.reviews)) {
@@ -410,12 +455,24 @@ const Panel = () => {
       }));
   }, []);
 
-  const fetchData = useCallback(async () => {
-    try {
+  const fetchData = useCallback(async ({ silent = false } = {}) => {
+    if (fetchInProgressRef.current) {
+      pendingFetchRef.current = true;
+      console.log('⏳ [Panel] Fetch already in progress, queuing follow-up request.');
+      return;
+    }
+
+    fetchInProgressRef.current = true;
+    pendingFetchRef.current = false;
+
+    if (!silent) {
       setLoading(true);
-      setError(null);
-      console.log('=== [Panel] FETCH DATA STARTED ===');
-      
+    }
+    setError(null);
+
+    try {
+      console.log('=== [Panel] FETCH DATA STARTED ===', { silent });
+
       const projectsRes = await getPanelProjects();
       console.log('📊 [Panel] API Response:', projectsRes.data);
 
@@ -423,12 +480,12 @@ const Panel = () => {
       if (projectsRes.data?.success) {
         const projects = projectsRes.data.data;
         console.log('✅ [Panel] Processing projects:', projects.length);
-        
+
         mappedTeams = projects.map(project => {
           console.log(`📋 [Panel] Processing project: ${project.name}`);
-          
+
           const normalizedStudents = project.students.map(student => normalizeStudentData(student));
-          
+
           return {
             id: project._id,
             title: project.name,
@@ -446,10 +503,9 @@ const Panel = () => {
         setTeams(mappedTeams);
         console.log('✅ [Panel] Teams set successfully:', mappedTeams.length);
 
-        // Batch request handling for panel reviews
         if (mappedTeams.length > 0) {
           const batchRequests = [];
-          
+
           mappedTeams.forEach(team => {
             const reviewTypes = getReviewTypesForTeam(team.markingSchema);
             team.students.forEach(student => {
@@ -470,14 +526,21 @@ const Panel = () => {
           }
         }
       }
-      
+
       console.log('✅ [Panel] FETCH DATA COMPLETED');
     } catch (error) {
       console.error('❌ [Panel] Error fetching data:', error);
       setError('Failed to load panel data. Please try again.');
       showNotification('error', 'Data Load Error', 'Failed to load panel data. Please try again.');
     } finally {
-      setLoading(false);
+      fetchInProgressRef.current = false;
+      if (pendingFetchRef.current) {
+        pendingFetchRef.current = false;
+        fetchData({ silent: true });
+      }
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [getReviewTypesForTeam, showNotification]);
 
@@ -485,12 +548,12 @@ const Panel = () => {
     fetchData();
   }, [fetchData]);
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(async ({ silent = true } = {}) => {
     try {
       setRefreshing(true);
-      console.log('🔄 [Panel] Starting refresh...');
-      
-      await fetchData();
+      console.log('🔄 [Panel] Starting refresh...', { silent });
+
+      await fetchData({ silent });
       setRefreshKey(prev => prev + 1);
       
       console.log('✅ [Panel] Refresh completed');
@@ -501,6 +564,86 @@ const Panel = () => {
       setRefreshing(false);
     }
   }, [fetchData, showNotification]);
+
+  useEffect(() => {
+    const socketUrl = getSocketUrl();
+    const socket = io(socketUrl, {
+      withCredentials: true,
+      transports: ['websocket', 'polling'],
+    });
+
+    socketRef.current = socket;
+
+    const handlePanelUpdate = async (payload) => {
+      console.log('📡 [Panel] Real-time update received:', payload);
+      const now = Date.now();
+      if (now - lastSocketNotificationRef.current > 3000) {
+        showNotification('info', 'Assignments Updated', 'Admin updated your panel assignments. Refreshing data…');
+        lastSocketNotificationRef.current = now;
+      }
+
+      try {
+        await handleRefresh({ silent: true });
+      } catch (error) {
+        console.error('❌ [Panel] Error handling real-time refresh:', error);
+      }
+    };
+
+    socket.on('connect', () => {
+      console.log('⚡ [Panel] Socket connected:', socket.id);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('❌ [Panel] Socket connection error:', error);
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('⚡ [Panel] Socket disconnected:', reason);
+    });
+
+    socket.on(SOCKET_EVENT, handlePanelUpdate);
+
+    return () => {
+      socket.off(SOCKET_EVENT, handlePanelUpdate);
+      const joined = joinedPanelsRef.current;
+      if (joined.length) {
+        socket.emit('panel:leave', joined);
+      }
+      joinedPanelsRef.current = [];
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [handleRefresh, showNotification]);
+
+  useEffect(() => {
+    if (!socketRef.current) {
+      return;
+    }
+
+    const socket = socketRef.current;
+
+    const nextPanelIds = Array.from(
+      new Set(
+        teams
+          .map((team) => normalizePanelId(team.panel))
+          .filter(Boolean)
+      )
+    );
+
+    const previousPanelIds = joinedPanelsRef.current;
+
+    const roomsToLeave = previousPanelIds.filter((panelId) => !nextPanelIds.includes(panelId));
+    if (roomsToLeave.length) {
+      socket.emit('panel:leave', roomsToLeave);
+    }
+
+    const roomsToJoin = nextPanelIds.filter((panelId) => !previousPanelIds.includes(panelId));
+    if (roomsToJoin.length) {
+      socket.emit('panel:join', roomsToJoin);
+    }
+
+    joinedPanelsRef.current = nextPanelIds;
+  }, [teams]);
 const handleProjectNameUpdate = useCallback(async (projectId, newName) => {
   try {
     console.log('🔄 [Panel] Updating project name:', { projectId, newName });
