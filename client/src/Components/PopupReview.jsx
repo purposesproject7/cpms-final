@@ -53,16 +53,29 @@ const PopupReview = ({
   const isGuideViewingPanel = !panelMode && isPanelReview;
   const showOnlyPPTApproval = isGuideViewingPanel;
 
-  const isFormLocked = locked && requestStatus !== "approved";
-  const isDeadlineLocked =
-    (deadlineInfo.isBeforeStart || deadlineInfo.isAfterEnd) &&
-    requestStatus !== "approved";
+  // ===========================================
+  // SIMPLIFIED LOCK LOGIC
+  // ===========================================
+  // The `locked` prop from Guide.jsx tells us if form should be locked
+  // The `requestStatus` tells us if there's an active extension
+  // 
+  // Lock rules:
+  // 1. If locked=true AND requestStatus !== 'approved' → LOCKED
+  // 2. If locked=true AND requestStatus === 'approved' → UNLOCKED (extension active)
+  // 3. Deadline checks are done in Guide.jsx before passing `locked` prop
+  // ===========================================
   
-  // ✅ NEW: Comments-based lock - blocks form if comments were submitted once, unless edit request approved
+  const finalFormLocked = locked && requestStatus !== "approved";
+  
+  // For UI display purposes - check if comments were once submitted
   const isCommentsLocked = commentsOnceSubmitted && requestStatus !== "approved";
   
-  // ✅ UPDATED: Final lock combines all lock conditions
-  const finalFormLocked = isFormLocked || isDeadlineLocked || isCommentsLocked;
+  // Debug logging
+  console.log('🔒 [PopupReview] Lock state:', {
+    locked,
+    requestStatus,
+    finalFormLocked
+  });
 
   const calculateDeadlineStatus = (reviewConfig) => {
     if (!reviewConfig?.deadline) {
@@ -1288,23 +1301,8 @@ const PopupReview = ({
         {/* Footer */}
 <div className="bg-white border-t border-gray-200 px-6 py-4 flex justify-between items-center rounded-b-2xl">
   <div className="flex space-x-3">
-    {/* ✅ UPDATED: Show Request Edit button whenever comments are locked */}
-    {isCommentsLocked && !showOnlyPPTApproval && (
-      <button
-        onClick={onRequestEdit}
-        disabled={requestPending}
-        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-          requestPending
-            ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-            : "bg-yellow-500 hover:bg-yellow-600 text-white hover:shadow-lg"
-        }`}
-      >
-        {requestPending ? "🕐 Request Pending..." : "🔑 Request Edit"}
-      </button>
-    )}
-
-    {/* ✅ Alternative: If you want separate button for deadline-based locks */}
-    {isDeadlineLocked && !isCommentsLocked && !showOnlyPPTApproval && (
+    {/* Show Request Edit button when form is locked and no approved extension */}
+    {finalFormLocked && requestStatus !== "approved" && !showOnlyPPTApproval && (
       <button
         onClick={onRequestEdit}
         disabled={requestPending}
@@ -1358,11 +1356,10 @@ const PopupReview = ({
           !showOnlyPPTApproval
         ? "🔒 Locked - Request Edit to Unlock"
         : requestStatus === "approved" &&
-          (deadlineInfo.isBeforeStart || deadlineInfo.isAfterEnd || isCommentsLocked) &&
           !showOnlyPPTApproval
         ? `Submit ${panelMode ? "Panel " : ""}Review (Extended)`
         : finalFormLocked && !showOnlyPPTApproval
-        ? "Locked"
+        ? "🔒 Locked"
         : sub === "Locked" && !showOnlyPPTApproval
         ? "Comments/Contributions Required"
         : showOnlyPPTApproval && !requiresPPT

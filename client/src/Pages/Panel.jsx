@@ -15,8 +15,10 @@ import {
 import FacultyBroadcastFeed from '../Components/FacultyBroadcastFeed';
 import ProjectNameEditor from '../Components/ProjectNameEditor';
 import { io } from 'socket.io-client';
+import { gsap } from 'gsap';
 
 const SOCKET_EVENT = 'panel:update';
+const MIN_REFRESH_SPIN_MS = 600;
 
 const getSocketUrl = () => {
   const explicit = import.meta.env.VITE_SOCKET_URL;
@@ -432,10 +434,18 @@ const Panel = () => {
   const { showNotification, hideNotification } = useNotification();
 
   const fetchInProgressRef = useRef(false);
+  const fetchPromiseRef = useRef(null);
   const pendingFetchRef = useRef(false);
+  const refreshStartRef = useRef(0);
+  const fetchGenerationRef = useRef(0);
+  const refreshEndTimeoutRef = useRef(null);
   const socketRef = useRef(null);
   const joinedPanelsRef = useRef([]);
   const lastSocketNotificationRef = useRef(0);
+  const refreshButtonRef = useRef(null);
+  const refreshIconRef = useRef(null);
+  const refreshTimelineRef = useRef(null);
+  const panelContainerRef = useRef(null);
 
   // ✅ FIXED: Static functions that don't cause re-renders
   const getReviewTypesForTeam = useCallback((markingSchema) => {
@@ -455,115 +465,221 @@ const Panel = () => {
       }));
   }, []);
 
-  const fetchData = useCallback(async ({ silent = false } = {}) => {
-    if (fetchInProgressRef.current) {
+  const fetchData = useCallback(({ silent = false } = {}) => {
+    if (fetchInProgressRef.current && fetchPromiseRef.current) {
       pendingFetchRef.current = true;
       console.log('⏳ [Panel] Fetch already in progress, queuing follow-up request.');
-      return;
+      return fetchPromiseRef.current;
     }
 
-    fetchInProgressRef.current = true;
     pendingFetchRef.current = false;
+    fetchInProgressRef.current = true;
+
+    if (refreshEndTimeoutRef.current) {
+      clearTimeout(refreshEndTimeoutRef.current);
+      refreshEndTimeoutRef.current = null;
+    }
+
+    refreshStartRef.current = Date.now();
+    const currentFetchId = fetchGenerationRef.current + 1;
+    fetchGenerationRef.current = currentFetchId;
 
     if (!silent) {
       setLoading(true);
     }
     setError(null);
 
-    try {
-      console.log('=== [Panel] FETCH DATA STARTED ===', { silent });
+    const fetchPromise = (async () => {
+      try {
+        console.log('=== [Panel] FETCH DATA STARTED ===', { silent });
 
-      const projectsRes = await getPanelProjects();
-      console.log('📊 [Panel] API Response:', projectsRes.data);
+        const projectsRes = await getPanelProjects();
+        console.log('📊 [Panel] API Response:', projectsRes.data);
 
-      let mappedTeams = [];
-      if (projectsRes.data?.success) {
-        const projects = projectsRes.data.data;
-        console.log('✅ [Panel] Processing projects:', projects.length);
+        let mappedTeams = [];
+        if (projectsRes.data?.success) {
+          const projects = projectsRes.data.data;
+          console.log('✅ [Panel] Processing projects:', projects.length);
 
-        mappedTeams = projects.map(project => {
-          console.log(`📋 [Panel] Processing project: ${project.name}`);
+          mappedTeams = projects.map(project => {
+            console.log(`📋 [Panel] Processing project: ${project.name}`);
 
-          const normalizedStudents = project.students.map(student => normalizeStudentData(student));
+            const normalizedStudents = project.students.map(student => normalizeStudentData(student));
 
-          return {
-            id: project._id,
-            title: project.name,
-            description: `Guide: ${project.guideFaculty?.name || 'N/A'}`,
-            students: normalizedStudents,
-            markingSchema: project.markingSchema,
-            school: project.school,
-            department: project.department,
-            guideFaculty: project.guideFaculty,
-            panel: project.panel,
-            bestProject: project.bestProject || false // ✅ ADDED: Include bestProject
-          };
-        });
+            return {
+              id: project._id,
+              title: project.name,
+              description: `Guide: ${project.guideFaculty?.name || 'N/A'}`,
+              students: normalizedStudents,
+              markingSchema: project.markingSchema,
+              school: project.school,
+              department: project.department,
+              guideFaculty: project.guideFaculty,
+              panel: project.panel,
+              bestProject: project.bestProject || false // ✅ ADDED: Include bestProject
+            };
+          });
 
-        setTeams(mappedTeams);
-        console.log('✅ [Panel] Teams set successfully:', mappedTeams.length);
+          setTeams(mappedTeams);
+          console.log('✅ [Panel] Teams set successfully:', mappedTeams.length);
 
-        if (mappedTeams.length > 0) {
-          const batchRequests = [];
+          if (mappedTeams.length > 0) {
+            const batchRequests = [];
 
-          mappedTeams.forEach(team => {
-            const reviewTypes = getReviewTypesForTeam(team.markingSchema);
-            team.students.forEach(student => {
-              reviewTypes.forEach(reviewType => {
-                batchRequests.push({
-                  regNo: student.regNo,
-                  reviewType: reviewType.key,
-                  facultyType: 'panel'
+            mappedTeams.forEach(team => {
+              const reviewTypes = getReviewTypesForTeam(team.markingSchema);
+              team.students.forEach(student => {
+                reviewTypes.forEach(reviewType => {
+                  batchRequests.push({
+                    regNo: student.regNo,
+                    reviewType: reviewType.key,
+                    facultyType: 'panel'
+                  });
                 });
               });
             });
-          });
 
-          console.log('🔍 [Panel] Fetching request statuses for', batchRequests.length, 'requests');
-          if (batchRequests.length > 0) {
-            const statuses = await batchCheckRequestStatuses(batchRequests);
-            setRequestStatuses(statuses);
+            console.log('🔍 [Panel] Fetching request statuses for', batchRequests.length, 'requests');
+            if (batchRequests.length > 0) {
+              batchCheckRequestStatuses(batchRequests)
+                .then((statuses) => {
+                  if (fetchGenerationRef.current === currentFetchId) {
+                    setRequestStatuses(statuses);
+                  } else {
+                    console.log('⚠️ [Panel] Ignoring stale request status payload');
+                  }
+                })
+                .catch((statusError) => {
+                  console.error('❌ [Panel] Failed to fetch request statuses:', statusError);
+                  if (fetchGenerationRef.current === currentFetchId) {
+                    setRequestStatuses({});
+                  }
+                });
+            } else {
+              setRequestStatuses({});
+            }
+          } else {
+            setRequestStatuses({});
           }
         }
-      }
 
-      console.log('✅ [Panel] FETCH DATA COMPLETED');
-    } catch (error) {
-      console.error('❌ [Panel] Error fetching data:', error);
-      setError('Failed to load panel data. Please try again.');
-      showNotification('error', 'Data Load Error', 'Failed to load panel data. Please try again.');
-    } finally {
-      fetchInProgressRef.current = false;
-      if (pendingFetchRef.current) {
+        console.log('✅ [Panel] FETCH DATA COMPLETED');
+      } catch (error) {
+        console.error('❌ [Panel] Error fetching data:', error);
+        setError('Failed to load panel data. Please try again.');
+        showNotification('error', 'Data Load Error', 'Failed to load panel data. Please try again.');
+      } finally {
+        const needsReplay = pendingFetchRef.current;
         pendingFetchRef.current = false;
-        fetchData({ silent: true });
+        fetchInProgressRef.current = false;
+        fetchPromiseRef.current = null;
+
+        if (!silent) {
+          setLoading(false);
+        }
+
+        if (needsReplay) {
+          await fetchData({ silent: true });
+          return;
+        }
+
+        const elapsed = Date.now() - refreshStartRef.current;
+        const remaining = Math.max(0, MIN_REFRESH_SPIN_MS - elapsed);
+        if (refreshEndTimeoutRef.current) {
+          clearTimeout(refreshEndTimeoutRef.current);
+        }
+        refreshEndTimeoutRef.current = setTimeout(() => {
+          setRefreshing(prev => (prev ? false : prev));
+          refreshEndTimeoutRef.current = null;
+        }, remaining);
       }
-      if (!silent) {
-        setLoading(false);
-      }
-    }
+    })();
+
+    fetchPromiseRef.current = fetchPromise;
+    return fetchPromise;
   }, [getReviewTypesForTeam, showNotification]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handleRefresh = useCallback(async ({ silent = true } = {}) => {
+  const handleRefresh = useCallback(async (input) => {
+    const isEventLike = input && typeof input === 'object' && ('preventDefault' in input || 'stopPropagation' in input);
+    if (isEventLike) {
+      input.preventDefault?.();
+    }
+
+    const { silent = true } = !isEventLike && input ? input : {};
+
     try {
-      setRefreshing(true);
+      setRefreshing(prev => (prev ? prev : true));
       console.log('🔄 [Panel] Starting refresh...', { silent });
 
       await fetchData({ silent });
       setRefreshKey(prev => prev + 1);
-      
+
       console.log('✅ [Panel] Refresh completed');
     } catch (error) {
       console.error('❌ [Panel] Error refreshing:', error);
       showNotification('error', 'Refresh Error', 'Error refreshing data. Please try again.');
-    } finally {
-      setRefreshing(false);
     }
   }, [fetchData, showNotification]);
+
+  useEffect(() => {
+    if (refreshIconRef.current) {
+      gsap.set(refreshIconRef.current, { transformOrigin: '50% 50%' });
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    if (!refreshIconRef.current) {
+      return;
+    }
+
+    if (!refreshTimelineRef.current) {
+      refreshTimelineRef.current = gsap.timeline({ repeat: -1, paused: true }).to(
+        refreshIconRef.current,
+        { rotation: '+=360', duration: 1.1, ease: 'linear' }
+      );
+    }
+
+    if (refreshing) {
+      refreshTimelineRef.current.play();
+      if (refreshButtonRef.current) {
+        gsap.to(refreshButtonRef.current, { scale: 1.02, duration: 0.3, ease: 'power2.out' });
+      }
+    } else {
+      refreshTimelineRef.current.pause();
+      const rotation = Number(gsap.getProperty(refreshIconRef.current, 'rotation')) || 0;
+      const snapped = Math.round(rotation / 360) * 360;
+      gsap.to(refreshIconRef.current, { rotation: snapped, duration: 0.4, ease: 'power2.out' });
+      if (refreshButtonRef.current) {
+        gsap.to(refreshButtonRef.current, { scale: 1, duration: 0.3, ease: 'power2.out' });
+      }
+    }
+  }, [refreshing, loading]);
+
+  useEffect(() => {
+    if (!panelContainerRef.current || loading) {
+      return;
+    }
+
+    gsap.fromTo(
+      panelContainerRef.current,
+      { opacity: 0.45, y: 14 },
+      { opacity: 1, y: 0, duration: 0.45, ease: 'power2.out' }
+    );
+  }, [refreshKey, loading, teams.length]);
+
+  useEffect(() => () => {
+    if (refreshTimelineRef.current) {
+      refreshTimelineRef.current.kill();
+      refreshTimelineRef.current = null;
+    }
+    if (refreshEndTimeoutRef.current) {
+      clearTimeout(refreshEndTimeoutRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const socketUrl = getSocketUrl();
@@ -975,15 +1091,19 @@ const handleProjectNameUpdate = useCallback(async (projectId, newName) => {
               </div>
               
               <button
+                ref={refreshButtonRef}
                 onClick={handleRefresh}
                 disabled={refreshing}
-                className={`flex items-center justify-center gap-3 px-6 py-3 rounded-xl text-white transition-all duration-300 text-sm sm:text-base font-medium transform hover:scale-105 ${
-                  refreshing 
-                    ? 'bg-gray-400 cursor-not-allowed' 
+                className={`flex items-center justify-center gap-3 px-6 py-3 rounded-xl text-white transition-all duration-300 text-sm sm:text-base font-medium ${
+                  refreshing
+                    ? 'bg-gradient-to-r from-purple-600 to-purple-700 cursor-wait opacity-80'
                     : 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl'
                 }`}
+                aria-busy={refreshing}
               >
-                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+                <span ref={refreshIconRef} className="flex items-center justify-center">
+                  <RefreshCw className="w-5 h-5" />
+                </span>
                 <span className="hidden sm:inline">{refreshing ? 'Refreshing...' : 'Refresh Status'}</span>
                 <span className="sm:hidden">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
               </button>
@@ -991,19 +1111,21 @@ const handleProjectNameUpdate = useCallback(async (projectId, newName) => {
             
             <FacultyBroadcastFeed />
 
-            <PanelContent
-              key={refreshKey}
-              teams={teams}
-              expandedTeam={expandedTeam}
-              setExpandedTeam={setExpandedTeam}
-              requestStatuses={requestStatuses}
-              setActivePopup={setActivePopup}
-              getTeamRequestStatus={getTeamRequestStatus}
-              isTeamDeadlinePassed={isTeamDeadlinePassed}
-              isReviewLocked={isReviewLocked}
-              refreshKey={refreshKey}
-              handleProjectNameUpdate={handleProjectNameUpdate}
-            />
+            <div ref={panelContainerRef} className="mt-6">
+              <PanelContent
+                key={refreshKey}
+                teams={teams}
+                expandedTeam={expandedTeam}
+                setExpandedTeam={setExpandedTeam}
+                requestStatuses={requestStatuses}
+                setActivePopup={setActivePopup}
+                getTeamRequestStatus={getTeamRequestStatus}
+                isTeamDeadlinePassed={isTeamDeadlinePassed}
+                isReviewLocked={isReviewLocked}
+                refreshKey={refreshKey}
+                handleProjectNameUpdate={handleProjectNameUpdate}
+              />
+            </div>
 
             {/* ✅ ADDED: Edit Request Modal */}
             <EditRequestModal

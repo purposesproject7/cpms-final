@@ -6,6 +6,7 @@
   // Import Panel model at the top of your file
   import Panel from "../models/panelSchema.js";
   import MarkingSchema from "../models/markingSchema.js";
+  import Request from "../models/requestSchema.js";
   /**
    * Create a new project.
    * Expected req.body:
@@ -1594,6 +1595,27 @@ export async function getAllPanelProjects(req, res) {
             student.reviews.set(reviewType, newReviewData);
           } else {
             student.reviews[reviewType] = newReviewData;
+          }
+
+          // Mark any approved extension request as "used" when submitting a locked review
+          if (reviewData.locked === true) {
+            try {
+              const approvedRequest = await Request.findOne({
+                student: student._id,
+                reviewType: reviewType,
+                status: "approved"
+              }).session(session);
+
+              if (approvedRequest) {
+                approvedRequest.status = "used";
+                approvedRequest.usedAt = new Date();
+                await approvedRequest.save({ session });
+                console.log(`✅ [BACKEND] Marked extension request as used for ${student.name} - ${reviewType}`);
+              }
+            } catch (reqErr) {
+              console.warn(`⚠️ [BACKEND] Could not mark request as used:`, reqErr.message);
+              // Don't fail the whole operation if this fails
+            }
           }
         }
 

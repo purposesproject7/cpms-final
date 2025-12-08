@@ -1133,17 +1133,57 @@ export async function setDefaultDeadline(req, res) {
 // need to restructure this
 export async function updateRequestStatus(req, res) {
   try {
-    const { requestId, status, newDeadline } = req.body;
+    const { requestId, status, newDeadline, regNo, reviewType: reqReviewType } = req.body;
 
     console.log("=== UPDATING REQUEST STATUS ===");
     console.log("Request ID:", requestId);
     console.log("Status:", status);
     console.log("New Deadline:", newDeadline);
+    console.log("RegNo (for used):", regNo);
+    console.log("ReviewType (for used):", reqReviewType);
 
-    if (!["approved", "rejected"].includes(status)) {
+    if (!["approved", "rejected", "used"].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid status value. Must be 'approved' or 'rejected'.",
+        message: "Invalid status value. Must be 'approved', 'rejected', or 'used'.",
+      });
+    }
+
+    // Handle "used" status - mark extension as consumed after guide re-submits
+    if (status === "used") {
+      if (!regNo || !reqReviewType) {
+        return res.status(400).json({
+          success: false,
+          message: "regNo and reviewType are required for marking request as used.",
+        });
+      }
+
+      // Find the approved request for this student/review
+      const Student = (await import("../models/studentSchema.js")).default;
+      const student = await Student.findOne({ regNo });
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: "Student not found.",
+        });
+      }
+
+      const request = await Request.findOne({
+        student: student._id,
+        reviewType: reqReviewType,
+        status: "approved"
+      });
+
+      if (request) {
+        request.status = "used";
+        request.usedAt = new Date();
+        await request.save();
+        console.log("✅ Request marked as used:", request._id);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Request marked as used successfully.",
       });
     }
 

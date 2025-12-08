@@ -393,7 +393,7 @@ const ReviewTable = ({
                 </div>
                 {team.students.some(student => checkReviewLocked(student, col.key)) && (
                   <div className="mt-2">
-                    <span className="px-2 py-1 text-xs bg-red-200 text-red-700 rounded">
+                    <span className="px-2 py-1 text-xs bg-emerald-100 text-emerald-700 rounded">
                       🔒 Locked
                     </span>
                   </div>
@@ -469,7 +469,7 @@ const ReviewTable = ({
                         <div>{renderAttendance(reviewData?.attendance)}</div>
                       </div>
                       {isLocked && (
-                        <div className="text-xs text-red-600 bg-red-100 px-2 py-1 rounded">
+                        <div className="text-xs text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
                           🔒 Locked
                         </div>
                       )}

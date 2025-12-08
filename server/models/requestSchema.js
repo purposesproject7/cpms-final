@@ -27,11 +27,14 @@ const requestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "approved", "rejected", "used"],
       default: "pending",
       required: true,
     },
     resolvedAt: {
+      type: Date,
+    },
+    usedAt: {
       type: Date,
     },
   },

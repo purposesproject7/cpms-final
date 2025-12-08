@@ -11,9 +11,8 @@ import {
   updateProject,
   createReviewRequest,
   batchCheckRequestStatuses,
-  updateStudent ,
+  updateStudent,
   updateProjectDetails
-  
 } from '../api';
 import ProjectNameEditor from '../Components/ProjectNameEditor';
 
@@ -41,6 +40,7 @@ const GuideContent = React.memo(({
   getDeadlines,
   getTeamRequestStatus, 
   isTeamDeadlinePassed,
+  isBaseDeadlinePassed,
   isReviewLocked,
   getButtonColor,
   setActivePopup,
@@ -143,26 +143,41 @@ const GuideContent = React.memo(({
                       </div>
                     </div>
                     
-                    {/* ✅ FIXED: Review Buttons with PPT approval status */}
+                    {/* Review Buttons with lock/extension status */}
                     <div className="w-full">
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                         {reviewTypes.map(reviewType => {
-                          const isPassed = isTeamDeadlinePassed(reviewType.key, team.id);
+                          const deadlinePassed = isTeamDeadlinePassed(reviewType.key, team.id);
                           const requestStatus = getTeamRequestStatus(team, reviewType.key);
                           const isPanelReview = reviewType.isPanelReview || false;
                           const schemaReview = team.markingSchema?.reviews?.find(r => r.reviewName === reviewType.key);
                           const requiresPPT = !!schemaReview?.pptApproved;
-                          
-                          // ✅ NEW: Check if PPT is approved for this review
+
+                          // Check if PPT is approved for this review
                           const pptApproved = isPPTApproved(team, reviewType.key);
+
+                          // Check if guide review is fully submitted/locked
+                          const guideReviewLockedForAll = !isPanelReview && team.students.every((student) => {
+                            const review = student.reviews?.get ? student.reviews.get(reviewType.key) : student.reviews?.[reviewType.key];
+                            return review?.locked === true;
+                          });
+
+                          // Extension badge: show when extension approved AND base deadline passed but extended hasn't
+                          const baseDeadlinePassed = isBaseDeadlinePassed(team, reviewType.key);
+                          const showExtBadge = requestStatus === 'approved' && baseDeadlinePassed && !deadlinePassed;
                           
-                          // ✅ NEW: Determine button color based on PPT approval
-                          const buttonColorClass = pptApproved 
-                            ? 'bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800'
-                            : isPanelReview 
-                              ? 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700'
-                              : getButtonColor(reviewType.key);
-                          
+                          // Lock icon: show when actually locked (deadline passed AND no active extension)
+                          const showLockIcon = deadlinePassed && requestStatus !== 'approved' && !isPanelReview;
+
+                          // Button color: green if locked/submitted, else normal
+                          const buttonColorClass = guideReviewLockedForAll
+                            ? 'bg-gradient-to-r from-emerald-500 to-emerald-700 hover:from-emerald-600 hover:to-emerald-800'
+                            : pptApproved 
+                              ? 'bg-gradient-to-r from-green-500 to-green-700 hover:from-green-600 hover:to-green-800'
+                              : isPanelReview 
+                                ? 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700'
+                                : getButtonColor(reviewType.key);
+
                           return (
                             <button
                               key={reviewType.key}
@@ -176,7 +191,7 @@ const GuideContent = React.memo(({
                               className={`px-3 py-3 text-white text-xs sm:text-sm font-medium rounded-xl transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl ${
                                 buttonColorClass
                               } ${
-                                isPassed ? 'opacity-75' : ''
+                                showLockIcon ? 'opacity-75' : ''
                               } flex flex-col items-center justify-center gap-2 min-h-[70px]`}
                             >
                               <span className="text-center leading-tight break-words w-full">
@@ -198,12 +213,12 @@ const GuideContent = React.memo(({
                                     👥
                                   </span>
                                 )}
-                                {requestStatus === 'approved' && !isPanelReview && (
+                                {showExtBadge && (
                                   <span className="text-xs bg-purple-500 px-2 py-0.5 rounded-full font-bold">
                                     EXT
                                   </span>
                                 )}
-                                {isPassed && !isPanelReview && (
+                                {showLockIcon && (
                                   <span className="text-xs bg-red-500 px-2 py-0.5 rounded-full">
                                     🔒
                                   </span>
@@ -671,56 +686,84 @@ const Guide = () => {
     return 'none';
   }, [requestStatuses]);
 
-  const isTeamDeadlinePassed = useCallback((reviewType, teamId) => {
-    const team = teams.find(t => t.id === teamId);
+  const parseDeadlineDate = (value) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value === 'string') {
+      const isoParsed = new Date(value);
+      if (!Number.isNaN(isoParsed.getTime())) return isoParsed;
+
+      const parts = value.split(/[-/]/).map(Number);
+      if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
+        const [a, b, c] = parts;
+        const year = c < 100 ? 2000 + c : c;
+        const month = (b || 1) - 1;
+        const day = a || 1;
+        const d = new Date(year, month, day, 23, 59, 59);
+        if (!Number.isNaN(d.getTime())) return d;
+      }
+    }
+    if (typeof value === 'object' && value?.to) {
+      return parseDeadlineDate(value.to);
+    }
+    return null;
+  };
+
+  const getDeadlinesForReview = (team, reviewType) => {
+    const teamDeadlines = getDeadlines(team?.markingSchema || {});
+    const baseRaw = teamDeadlines ? teamDeadlines[reviewType] : null;
+    const baseDeadline = parseDeadlineDate(baseRaw?.to ? baseRaw.to : baseRaw);
+
+    let studentDeadline = null;
+    (team?.students || []).forEach((student) => {
+      const dl = student.deadline?.get ? student.deadline.get(reviewType) : student.deadline?.[reviewType];
+      if (!dl) return;
+      const parsed = parseDeadlineDate(dl?.to ? dl.to : dl);
+      if (parsed && (!studentDeadline || parsed > studentDeadline)) {
+        studentDeadline = parsed;
+      }
+    });
+
+    return { baseDeadline, studentDeadline };
+  };
+
+  const isTeamDeadlinePassed = (reviewType, teamId) => {
+    const team = teams.find((t) => t.id === teamId);
     if (!team) return false;
 
     const reviewTypes = getReviewTypes(team.markingSchema);
-    const reviewConfig = reviewTypes.find(r => r.key === reviewType);
-    
-    if (reviewConfig?.isPanelReview) {
-      return false;
-    }
+    const reviewConfig = reviewTypes.find((r) => r.key === reviewType);
+    if (reviewConfig?.isPanelReview) return false;
 
-    const teamDeadlines = getDeadlines(team.markingSchema);
-    if (!teamDeadlines || !teamDeadlines[reviewType]) {
-      return false;
-    }
+    const { baseDeadline, studentDeadline } = getDeadlinesForReview(team, reviewType);
+    const latest = studentDeadline || baseDeadline;
+    if (!latest) return false;
 
-    const deadline = teamDeadlines[reviewType];
-    const now = new Date();
-    
-    try {
-      if (deadline.from && deadline.to) {
-        const toDate = new Date(deadline.to);
-        return now > toDate;
-      } else if (typeof deadline === 'string' || deadline instanceof Date) {
-        const deadlineDate = new Date(deadline);
-        return now > deadlineDate;
-      }
-    } catch (dateError) {
-      console.error('❌ Error parsing deadline:', dateError);
-      return false;
-    }
-    
-    return false;
-  }, [teams, getReviewTypes, getDeadlines]);
+    return Date.now() > latest.getTime();
+  };
+
+  const isBaseDeadlinePassed = (team, reviewType) => {
+    const { baseDeadline } = getDeadlinesForReview(team, reviewType);
+    if (!baseDeadline) return false;
+    return Date.now() > baseDeadline.getTime();
+  };
 
   const isReviewLocked = useCallback((student, reviewType, teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    const requestStatus = team ? getTeamRequestStatus(team, reviewType) : 'none';
+
     const reviewData = student.reviews?.get ? student.reviews.get(reviewType) : student.reviews?.[reviewType];
+    // Always honor an explicit lock stored on the review, even if extension is approved
     if (reviewData?.locked) {
       return true;
     }
-    
-    const team = teams.find(t => t.id === teamId);
-    if (team) {
-      const requestStatus = getTeamRequestStatus(team, reviewType);
-      if (requestStatus === 'approved') {
-        console.log(`🔓 [isReviewLocked] Extension approved for ${reviewType} - UNLOCKING`);
-        return false;
-      }
+
+    // If admin approved extension, stay unlocked only until deadline is passed again
+    if (requestStatus === 'approved') {
+      const deadlinePassed = isTeamDeadlinePassed(reviewType, teamId);
+      return deadlinePassed;
     }
-    
+
     const deadlinePassed = isTeamDeadlinePassed(reviewType, teamId);
     console.log(`🔒 [isReviewLocked] Deadline passed: ${deadlinePassed}, Review type: ${reviewType}`);
     return deadlinePassed;
@@ -776,7 +819,7 @@ const Guide = () => {
         const reviewObject = {
           marks: marks,
           attendance: studentReviewData.attendance || { value: false, locked: false },
-          locked: studentReviewData.locked || false,
+          locked: true, // Lock immediately after submission per requirement
           comments: studentReviewData.comments || ''
         };
 
@@ -819,6 +862,9 @@ const Guide = () => {
       hideNotification(loadingId);
       
       if (response.data?.success || response.data?.updates) {
+        // Extension request is now marked as "used" by the backend automatically
+        // when submitting a locked review
+
         setActivePopup(null);
         
         setTimeout(async () => {
@@ -1037,6 +1083,7 @@ const Guide = () => {
               getDeadlines={getDeadlines}
               getTeamRequestStatus={getTeamRequestStatus}
               isTeamDeadlinePassed={isTeamDeadlinePassed}
+              isBaseDeadlinePassed={isBaseDeadlinePassed}
               isReviewLocked={isReviewLocked}
               getButtonColor={getButtonColor}
               setActivePopup={setActivePopup}
@@ -1056,10 +1103,43 @@ const Guide = () => {
               const team = teams.find(t => t.id === activePopup.teamId);
               const reviewTypes = getReviewTypes(team.markingSchema);
               const reviewConfig = reviewTypes.find(r => r.key === activePopup.type);
-              const isLocked = isTeamDeadlinePassed(activePopup.type, activePopup.teamId);
               const requestStatus = getTeamRequestStatus(team, activePopup.type);
               
-              const showRequestEdit = isLocked && (requestStatus === 'none' || requestStatus === 'rejected');
+              // ===========================================
+              // SIMPLIFIED LOCK CALCULATION
+              // ===========================================
+              // 1. Check if any student has locked review (previously submitted)
+              const anyStudentHasLockedReview = team.students.some((student) => {
+                const review = student.reviews?.get ? student.reviews.get(activePopup.type) : student.reviews?.[activePopup.type];
+                return review?.locked === true;
+              });
+              
+              // 2. Check if the effective deadline has passed
+              // This uses studentDeadline (extended) if available, otherwise baseDeadline
+              const deadlinePassed = isTeamDeadlinePassed(activePopup.type, activePopup.teamId);
+              
+              // 3. Determine lock state:
+              // - Locked if deadline passed (and no extension OR extension deadline also passed)
+              // - Locked if previously submitted AND no approved extension
+              // - When extension is approved, check if the EXTENDED deadline has passed
+              let isLocked = false;
+              
+              if (requestStatus === 'approved') {
+                // Extension is active - check if extended deadline has passed
+                isLocked = deadlinePassed; // deadlinePassed already considers student deadline (extended)
+              } else {
+                // No extension - locked if deadline passed OR previously submitted
+                isLocked = deadlinePassed || anyStudentHasLockedReview;
+              }
+              
+              console.log('🔒 [Guide] Popup lock calculation:', {
+                deadlinePassed,
+                anyStudentHasLockedReview,
+                requestStatus,
+                isLocked
+              });
+              
+              const showRequestEdit = isLocked && (requestStatus === 'none' || requestStatus === 'rejected' || requestStatus === 'used');
               
               const isPanelReview = reviewConfig?.isPanelReview || false;
               
